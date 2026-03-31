@@ -48,4 +48,20 @@ urlpatterns = [
     # ── Dashboard ──
     path('dashboard/stats/', views.DashboardStatsView.as_view(),
          name='dashboard-stats'),
+     # ── Workflow ──
+     path('interventions/<int:pk>/changer-statut/',
+          views.InterventionChangerStatutView.as_view(),
+          name='intervention-changer-statut'),
+
+     path('interventions/<int:pk>/transitions/',
+          views.InterventionTransitionsView.as_view(),
+          name='intervention-transitions'),
+          # ── Validation et Facturation ──
+     path('interventions/<int:pk>/valider/',
+          views.InterventionValiderView.as_view(),
+          name='intervention-valider'),
+          
+     path('factures/<int:pk>/pdf/',
+     views.FacturePDFView.as_view(),
+     name='facture-pdf'),
 ]

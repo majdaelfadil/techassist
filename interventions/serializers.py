@@ -20,6 +20,7 @@ class ClientSerializer(serializers.ModelSerializer):
 class TechnicienSerializer(serializers.ModelSerializer):
     class Meta:
         model = Technicien
+        
         fields = '__all__'
 
 # ─── APPAREIL ───

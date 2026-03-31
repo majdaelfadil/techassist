@@ -23,3 +23,5 @@ db.sqlite3
 # Windows
 Thumbs.db
 desktop.ini
+
+interventions/static/

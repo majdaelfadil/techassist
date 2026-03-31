@@ -1,8 +1,10 @@
+from django.http import HttpResponse
+from .pdf_generator import generer_facture_pdf
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Count, Avg
+from django.db.models import Count, F
 from django.utils import timezone
 from .models import (Client, Technicien, Appareil, Piece,
                      Intervention, PieceUtilisee,
@@ -14,6 +16,7 @@ from .serializers import (ClientSerializer, TechnicienSerializer,
                            InterventionDetailSerializer,
                            RapportSerializer, FactureSerializer,
                            DiagnosticIASerializer)
+from .workflow import transition_autorisee, get_transitions_possibles
 
 # ─── CLIENTS ───
 class ClientListCreateView(generics.ListCreateAPIView):
@@ -28,7 +31,8 @@ class ClientListCreateView(generics.ListCreateAPIView):
         if search:
             queryset = queryset.filter(nom__icontains=search)
         if telephone:
-            queryset = queryset.filter(telephone__icontains=telephone)
+            queryset = queryset.filter(
+                telephone__icontains=telephone)
         return queryset
 
 class ClientDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -96,14 +100,16 @@ class InterventionListCreateView(generics.ListCreateAPIView):
         queryset = Intervention.objects.all()
         statut = self.request.query_params.get('statut')
         urgence = self.request.query_params.get('urgence')
-        technicien_id = self.request.query_params.get('technicien_id')
+        technicien_id = self.request.query_params.get(
+            'technicien_id')
         client_id = self.request.query_params.get('client_id')
         if statut:
             queryset = queryset.filter(statut=statut)
         if urgence:
             queryset = queryset.filter(urgence=urgence)
         if technicien_id:
-            queryset = queryset.filter(technicien_id=technicien_id)
+            queryset = queryset.filter(
+                technicien_id=technicien_id)
         if client_id:
             queryset = queryset.filter(client_id=client_id)
         return queryset
@@ -115,6 +121,74 @@ class InterventionDetailView(generics.RetrieveUpdateAPIView):
     queryset = Intervention.objects.all()
     serializer_class = InterventionDetailSerializer
     permission_classes = [IsAuthenticated]
+
+# ─── CHANGER STATUT INTERVENTION ───
+class InterventionChangerStatutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            intervention = Intervention.objects.get(pk=pk)
+        except Intervention.DoesNotExist:
+            return Response(
+                {'erreur': 'Intervention non trouvée'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        nouveau_statut = request.data.get('statut')
+
+        if not nouveau_statut:
+            return Response(
+                {'erreur': 'Statut manquant'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not transition_autorisee(intervention.statut,
+                                    nouveau_statut):
+            transitions = get_transitions_possibles(
+                intervention.statut)
+            return Response({
+                'erreur': 'Transition non autorisée',
+                'statut_actuel': intervention.statut,
+                'transitions_possibles': transitions
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        ancien_statut = intervention.statut
+        intervention.statut = nouveau_statut
+
+        if nouveau_statut == 'cloture':
+            intervention.date_cloture = timezone.now()
+
+        intervention.save()
+
+        return Response({
+            'message': 'Statut changé avec succès',
+            'ancien_statut': ancien_statut,
+            'nouveau_statut': nouveau_statut,
+            'transitions_possibles': get_transitions_possibles(
+                nouveau_statut)
+        }, status=status.HTTP_200_OK)
+
+# ─── OBTENIR TRANSITIONS POSSIBLES ───
+class InterventionTransitionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            intervention = Intervention.objects.get(pk=pk)
+        except Intervention.DoesNotExist:
+            return Response(
+                {'erreur': 'Intervention non trouvée'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        transitions = get_transitions_possibles(
+            intervention.statut)
+
+        return Response({
+            'statut_actuel': intervention.statut,
+            'transitions_possibles': transitions
+        })
 
 # ─── RAPPORTS ───
 class RapportListCreateView(generics.ListCreateAPIView):
@@ -160,8 +234,7 @@ class DashboardStatsView(APIView):
             'techniciens_disponibles': Technicien.objects.filter(
                 disponible=True).count(),
             'pieces_en_rupture': Piece.objects.filter(
-                quantite_stock__lte=models.F(
-                    'seuil_minimum')).count(),
+                quantite_stock__lte=F('seuil_minimum')).count(),
         }
 
         interventions_par_statut = Intervention.objects.values(
@@ -175,3 +248,83 @@ class DashboardStatsView(APIView):
             'par_statut': list(interventions_par_statut),
             'par_type': list(interventions_par_type),
         })
+    # ─── FACTURATION AUTOMATIQUE ───
+class InterventionValiderView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            intervention = Intervention.objects.get(pk=pk)
+        except Intervention.DoesNotExist:
+            return Response(
+                {'erreur': 'Intervention non trouvée'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Vérifier que l'intervention est terminée
+        if intervention.statut != 'termine':
+            return Response({
+                'erreur': 'Intervention doit être terminée',
+                'statut_actuel': intervention.statut
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Calculer montant des pièces utilisées
+        montant_pieces = sum(
+            p.quantite * p.prix_unitaire
+            for p in intervention.pieces_utilisees.all()
+        )
+
+        # Calculer montant main d'oeuvre
+        duree = intervention.duree_reelle or intervention.duree_estimee or 1
+        technicien = intervention.technicien
+        tarif = technicien.tarif_horaire if technicien else 150
+        montant_main_oeuvre = float(duree) * float(tarif)
+
+        # Créer la facture automatiquement
+        facture, created = Facture.objects.get_or_create(
+            intervention=intervention,
+            defaults={
+                'montant_main_oeuvre': montant_main_oeuvre,
+                'montant_pieces': montant_pieces,
+                'montant_deplacement': 0,
+                'tva': 20,
+                'statut': 'brouillon'
+            }
+        )
+
+        # Changer le statut de l'intervention
+        intervention.statut = 'valide'
+        intervention.save()
+
+        return Response({
+            'message': 'Intervention validée et facture générée',
+            'intervention_statut': intervention.statut,
+            'facture': {
+                'numero': facture.numero,
+                'montant_main_oeuvre': facture.montant_main_oeuvre,
+                'montant_pieces': facture.montant_pieces,
+                'total_ht': facture.total_ht,
+                'total_ttc': facture.total_ttc,
+                'statut': facture.statut
+            }
+        }, status=status.HTTP_200_OK)
+    # ─── TÉLÉCHARGER FACTURE PDF ───
+class FacturePDFView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            facture = Facture.objects.get(pk=pk)
+        except Facture.DoesNotExist:
+            return Response(
+                {'erreur': 'Facture non trouvée'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        buffer = generer_facture_pdf(facture)
+
+        response = HttpResponse(
+            buffer, content_type='application/pdf')
+        response['Content-Disposition'] = (
+            f'attachment; filename="facture_{facture.numero}.pdf"')
+        return response
