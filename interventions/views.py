@@ -117,7 +117,7 @@ class InterventionListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
-class InterventionDetailView(generics.RetrieveUpdateAPIView):
+class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Intervention.objects.all()
     serializer_class = InterventionDetailSerializer
     permission_classes = [IsAuthenticated]
