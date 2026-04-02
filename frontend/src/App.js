@@ -9,6 +9,7 @@ import Interventions from './pages/Interventions';
 import Clients from './pages/Clients';
 import Techniciens from './pages/Techniciens';
 import Pieces from './pages/Pieces';
+import Factures from './pages/Factures';
 
 const ProtectedRoute = ({ children }) => {
     if (!authService.isAuthenticated()) {
@@ -34,7 +35,8 @@ function App() {
                 <Route path="/interventions" element={<ProtectedRoute><Interventions /></ProtectedRoute>} />
                 <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
                 <Route path="/techniciens" element={<ProtectedRoute><Techniciens /></ProtectedRoute>} /> 
-                <Route path="/pieces" element={<ProtectedRoute><Pieces /></ProtectedRoute>} />              
+                <Route path="/pieces" element={<ProtectedRoute><Pieces /></ProtectedRoute>} />  
+                <Route path="/factures" element={<ProtectedRoute><Factures /></ProtectedRoute>} />              
             </Routes>
         </BrowserRouter>
     );

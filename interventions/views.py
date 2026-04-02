@@ -53,7 +53,7 @@ class TechnicienListView(generics.ListCreateAPIView):
             queryset = queryset.filter(disponible=True)
         return queryset
 
-class TechnicienDetailView(generics.RetrieveUpdateAPIView):
+class TechnicienDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Technicien.objects.all()
     serializer_class = TechnicienSerializer
     permission_classes = [IsAuthenticated]
@@ -82,7 +82,7 @@ class PieceListCreateView(generics.ListCreateAPIView):
     serializer_class = PieceSerializer
     permission_classes = [IsAuthenticated]
 
-class PieceDetailView(generics.RetrieveUpdateAPIView):
+class PieceDetailView( generics.RetrieveUpdateDestroyAPIView):
     queryset = Piece.objects.all()
     serializer_class = PieceSerializer
     permission_classes = [IsAuthenticated]
