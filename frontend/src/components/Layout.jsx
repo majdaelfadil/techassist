@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Avatar, Dropdown, Badge } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Badge }
+    from 'antd';
 import {
-    DashboardOutlined, ToolOutlined, UserOutlined,
-    TeamOutlined, AppstoreOutlined, FileTextOutlined,
-    LogoutOutlined, BellOutlined, MenuFoldOutlined,
-    MenuUnfoldOutlined
+    DashboardOutlined, ToolOutlined,
+    UserOutlined, TeamOutlined,
+    AppstoreOutlined, FileTextOutlined,
+    LogoutOutlined, BellOutlined,
+    MenuFoldOutlined, MenuUnfoldOutlined,
+    CalendarOutlined
 } from '@ant-design/icons';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation }
+    from 'react-router-dom';
 import authService from '../services/authService';
 
 const { Header, Sider, Content } = Layout;
@@ -15,56 +19,78 @@ const AppLayout = ({ children }) => {
     const [collapsed, setCollapsed] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
+    const role = authService.getRole();
+    const nom = authService.getNom();
 
-    const menuItems = [
+    const tousMenuItems = [
         {
             key: '/dashboard',
             icon: <DashboardOutlined />,
             label: 'Dashboard',
+            roles: ['responsable', 'agent',
+                    'technicien']
         },
         {
             key: '/interventions',
             icon: <ToolOutlined />,
             label: 'Interventions',
+            roles: ['responsable', 'agent',
+                    'technicien']
+        },
+        {
+            key: '/planning',
+            icon: <CalendarOutlined />,
+            label: 'Mon Planning',
+            roles: ['technicien']
         },
         {
             key: '/clients',
             icon: <UserOutlined />,
             label: 'Clients',
+            roles: ['responsable', 'agent']
         },
         {
             key: '/techniciens',
             icon: <TeamOutlined />,
             label: 'Techniciens',
+            roles: ['responsable']
         },
         {
             key: '/pieces',
             icon: <AppstoreOutlined />,
             label: 'Pièces',
+            roles: ['responsable', 'technicien']
         },
         {
             key: '/factures',
             icon: <FileTextOutlined />,
             label: 'Factures',
+            roles: ['responsable']
         },
     ];
 
+    const menuItems = tousMenuItems
+        .filter(item => item.roles.includes(role))
+        .map(({ roles, ...item }) => item);
+
+    const couleurRole = {
+        'responsable': '#FF8C00',
+        'agent':       '#1890ff',
+        'technicien':  '#52c41a'
+    };
+
     const userMenu = {
-        items: [
-            {
-                key: 'logout',
-                icon: <LogoutOutlined />,
-                label: 'Déconnexion',
-                onClick: () => authService.logout(),
-                danger: true
-            }
-        ]
+        items: [{
+            key: 'logout',
+            icon: <LogoutOutlined />,
+            label: 'Déconnexion',
+            onClick: () => authService.logout(),
+            danger: true
+        }]
     };
 
     return (
         <Layout style={{ minHeight: '100vh' }}>
-
-            {/* ─── SIDEBAR ─── */}
             <Sider
                 trigger={null}
                 collapsible
@@ -72,7 +98,8 @@ const AppLayout = ({ children }) => {
                 width={220}
                 style={{
                     background: '#1A1A1A',
-                    boxShadow: '2px 0 8px rgba(0,0,0,0.15)'
+                    boxShadow:
+                        '2px 0 8px rgba(0,0,0,0.15)'
                 }}
             >
                 {/* LOGO */}
@@ -80,15 +107,13 @@ const AppLayout = ({ children }) => {
                     height: 64,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: collapsed
-                        ? 'center' : 'flex-start',
-                    padding: collapsed ? 0 : '0 20px',
+                    padding: collapsed ?
+                        '0 16px' : '0 20px',
                     borderBottom: '1px solid #2a2a2a',
                     gap: 12
                 }}>
                     <div style={{
-                        width: 34,
-                        height: 34,
+                        width: 34, height: 34,
                         background: '#FF8C00',
                         borderRadius: 8,
                         display: 'flex',
@@ -121,6 +146,26 @@ const AppLayout = ({ children }) => {
                     )}
                 </div>
 
+                {/* RÔLE */}
+                {!collapsed && (
+                    <div style={{
+                        padding: '10px 20px',
+                        borderBottom: '1px solid #2a2a2a'
+                    }}>
+                        <span style={{
+                            padding: '3px 10px',
+                            borderRadius: 12,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: couleurRole[role],
+                            background:
+                                `${couleurRole[role]}22`
+                        }}>
+                            {role?.toUpperCase()}
+                        </span>
+                    </div>
+                )}
+
                 {/* MENU */}
                 <Menu
                     mode="inline"
@@ -137,26 +182,26 @@ const AppLayout = ({ children }) => {
             </Sider>
 
             <Layout>
-                {/* ─── HEADER ─── */}
+                {/* HEADER */}
                 <Header style={{
                     background: '#fff',
                     padding: '0 20px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                    boxShadow:
+                        '0 1px 4px rgba(0,0,0,0.08)',
                     height: 64
                 }}>
-                    {/* Bouton collapse */}
                     <div
-                        onClick={() => setCollapsed(!collapsed)}
+                        onClick={() =>
+                            setCollapsed(!collapsed)}
                         style={{
                             cursor: 'pointer',
-                            padding: '8px',
+                            padding: 8,
                             borderRadius: 8,
                             color: '#666',
-                            fontSize: 18,
-                            transition: 'all 0.2s',
+                            fontSize: 18
                         }}
                     >
                         {collapsed ?
@@ -164,13 +209,11 @@ const AppLayout = ({ children }) => {
                             <MenuFoldOutlined />}
                     </div>
 
-                    {/* Actions droite */}
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: 20
                     }}>
-                        {/* Notifications */}
                         <Badge count={3} size="small">
                             <BellOutlined style={{
                                 fontSize: 18,
@@ -179,41 +222,51 @@ const AppLayout = ({ children }) => {
                             }} />
                         </Badge>
 
-                        {/* Avatar */}
-                        <Dropdown menu={userMenu}
-                                  placement="bottomRight"
-                                  arrow>
+                        <Dropdown
+                            menu={userMenu}
+                            placement="bottomRight"
+                            arrow
+                        >
                             <div style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 8,
                                 cursor: 'pointer',
                                 padding: '4px 8px',
-                                borderRadius: 8,
-                                transition: 'all 0.2s'
+                                borderRadius: 8
                             }}>
-                                <Avatar
-                                    style={{
-                                        backgroundColor: '#FF8C00',
-                                        fontSize: 14,
-                                        fontWeight: 'bold'
-                                    }}
-                                >
-                                    A
-                                </Avatar>
-                                <span style={{
-                                    fontWeight: 600,
+                                <Avatar style={{
+                                    backgroundColor:
+                                        couleurRole[role],
                                     fontSize: 14,
-                                    color: '#1A1A1A'
+                                    fontWeight: 'bold'
                                 }}>
-                                    Admin
-                                </span>
+                                    {nom?.charAt(0)
+                                        ?.toUpperCase()}
+                                </Avatar>
+                                <div>
+                                    <div style={{
+                                        fontWeight: 600,
+                                        fontSize: 13,
+                                        color: '#1A1A1A',
+                                        lineHeight: 1.2
+                                    }}>
+                                        {nom}
+                                    </div>
+                                    <div style={{
+                                        fontSize: 11,
+                                        color:
+                                            couleurRole[role]
+                                    }}>
+                                        {role}
+                                    </div>
+                                </div>
                             </div>
                         </Dropdown>
                     </div>
                 </Header>
 
-                {/* ─── CONTENT ─── */}
+                {/* CONTENT */}
                 <Content style={{
                     background: '#f8f9fa',
                     minHeight: 'calc(100vh - 64px)',
