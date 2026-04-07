@@ -19,13 +19,16 @@ const Pieces = () => {
     const [modalCreer, setModalCreer] = useState(false);
     const [modalModifier, setModalModifier] = useState(false);
     const [drawerDetail, setDrawerDetail] = useState(false);
-    const [pieceSelectionnee, setPieceSelectionnee] =
-        useState(null);
+    const [pieceSelectionnee, setPieceSelectionnee] = useState(null);
+    const [role, setRole] = useState('');
     const [form] = Form.useForm();
     const [formModifier] = Form.useForm();
 
     useEffect(() => {
         chargerPieces();
+        api.get('/auth/profil/').then(res => {
+            setRole(res.data.role);
+        });
     }, []);
 
     // ─── CHARGER PIÈCES ───
@@ -95,15 +98,12 @@ const Pieces = () => {
 
     // ─── FILTRAGE LOCAL ───
     const piecesFiltrees = pieces.filter(p =>
-        p.nom?.toLowerCase().includes(
-            search.toLowerCase()) ||
-        p.reference?.toLowerCase().includes(
-            search.toLowerCase())
+        p.nom?.toLowerCase().includes(search.toLowerCase()) ||
+        p.reference?.toLowerCase().includes(search.toLowerCase())
     );
 
     // ─── PIÈCES EN RUPTURE ───
-    const piecesEnRupture = pieces.filter(
-        p => p.en_rupture).length;
+    const piecesEnRupture = pieces.filter(p => p.en_rupture).length;
 
     // ─── FORMULAIRE PIÈCE ───
     const FormulairePiece = ({ form, onFinish }) => (
@@ -117,10 +117,7 @@ const Pieces = () => {
                 <Form.Item
                     label="Nom de la pièce"
                     name="nom"
-                    rules={[{
-                        required: true,
-                        message: 'Nom obligatoire'
-                    }]}
+                    rules={[{ required: true, message: 'Nom obligatoire' }]}
                     style={{ flex: 1 }}
                 >
                     <Input
@@ -132,10 +129,7 @@ const Pieces = () => {
                 <Form.Item
                     label="Référence"
                     name="reference"
-                    rules={[{
-                        required: true,
-                        message: 'Référence obligatoire'
-                    }]}
+                    rules={[{ required: true, message: 'Référence obligatoire' }]}
                     style={{ flex: 1 }}
                 >
                     <Input
@@ -149,57 +143,39 @@ const Pieces = () => {
                 <Form.Item
                     label="Quantité en stock"
                     name="quantite_stock"
-                    rules={[{
-                        required: true,
-                        message: 'Quantité obligatoire'
-                    }]}
+                    rules={[{ required: true, message: 'Quantité obligatoire' }]}
                     style={{ flex: 1 }}
                 >
                     <InputNumber
                         min={0}
                         placeholder="0"
-                        style={{
-                            width: '100%',
-                            borderRadius: 8
-                        }}
+                        style={{ width: '100%', borderRadius: 8 }}
                     />
                 </Form.Item>
 
                 <Form.Item
                     label="Seuil minimum"
                     name="seuil_minimum"
-                    rules={[{
-                        required: true,
-                        message: 'Seuil obligatoire'
-                    }]}
+                    rules={[{ required: true, message: 'Seuil obligatoire' }]}
                     style={{ flex: 1 }}
                 >
                     <InputNumber
                         min={0}
                         placeholder="5"
-                        style={{
-                            width: '100%',
-                            borderRadius: 8
-                        }}
+                        style={{ width: '100%', borderRadius: 8 }}
                     />
                 </Form.Item>
 
                 <Form.Item
                     label="Prix unitaire (MAD)"
                     name="prix_unitaire"
-                    rules={[{
-                        required: true,
-                        message: 'Prix obligatoire'
-                    }]}
+                    rules={[{ required: true, message: 'Prix obligatoire' }]}
                     style={{ flex: 1 }}
                 >
                     <InputNumber
                         min={0}
                         placeholder="0.00"
-                        style={{
-                            width: '100%',
-                            borderRadius: 8
-                        }}
+                        style={{ width: '100%', borderRadius: 8 }}
                         addonAfter="MAD"
                     />
                 </Form.Item>
@@ -245,12 +221,9 @@ const Pieces = () => {
             render: (nom, record) => (
                 <Space>
                     {record.en_rupture && (
-                        <WarningOutlined
-                            style={{ color: '#f5222d' }} />
+                        <WarningOutlined style={{ color: '#f5222d' }} />
                     )}
-                    <span style={{ fontWeight: 600 }}>
-                        {nom}
-                    </span>
+                    <span style={{ fontWeight: 600 }}>{nom}</span>
                 </Space>
             )
         },
@@ -275,13 +248,10 @@ const Pieces = () => {
             dataIndex: 'quantite_stock',
             render: (qty, record) => {
                 const pct = Math.min(
-                    (qty / (record.seuil_minimum * 3)) * 100,
-                    100
+                    (qty / (record.seuil_minimum * 3)) * 100, 100
                 );
-                const color = record.en_rupture ?
-                    '#f5222d' :
-                    qty <= record.seuil_minimum * 1.5 ?
-                        '#fa8c16' : '#52c41a';
+                const color = record.en_rupture ? '#f5222d' :
+                    qty <= record.seuil_minimum * 1.5 ? '#fa8c16' : '#52c41a';
                 return (
                     <div style={{ minWidth: 120 }}>
                         <div style={{
@@ -289,16 +259,10 @@ const Pieces = () => {
                             justifyContent: 'space-between',
                             marginBottom: 4
                         }}>
-                            <span style={{
-                                fontWeight: 700,
-                                color: color
-                            }}>
+                            <span style={{ fontWeight: 700, color }}>
                                 {qty}
                             </span>
-                            <span style={{
-                                color: '#999',
-                                fontSize: 11
-                            }}>
+                            <span style={{ color: '#999', fontSize: 11 }}>
                                 min: {record.seuil_minimum}
                             </span>
                         </div>
@@ -316,19 +280,14 @@ const Pieces = () => {
             title: 'Seuil minimum',
             dataIndex: 'seuil_minimum',
             render: (seuil) => (
-                <span style={{ color: '#666' }}>
-                    {seuil} unités
-                </span>
+                <span style={{ color: '#666' }}>{seuil} unités</span>
             )
         },
         {
             title: 'Prix unitaire',
             dataIndex: 'prix_unitaire',
             render: (prix) => (
-                <span style={{
-                    color: '#FF8C00',
-                    fontWeight: 700
-                }}>
+                <span style={{ color: '#FF8C00', fontWeight: 700 }}>
                     {prix} MAD
                 </span>
             )
@@ -374,35 +333,38 @@ const Pieces = () => {
                             type="text"
                             icon={<EyeOutlined />}
                             style={{ color: '#FF8C00' }}
-                            onClick={() =>
-                                ouvrirDetail(record)}
+                            onClick={() => ouvrirDetail(record)}
                         />
                     </Tooltip>
-                    <Tooltip title="Modifier">
-                        <Button
-                            type="text"
-                            icon={<EditOutlined />}
-                            style={{ color: '#1890ff' }}
-                            onClick={() =>
-                                ouvrirModifier(record)}
-                        />
-                    </Tooltip>
-                    <Tooltip title="Supprimer">
-                        <Popconfirm
-                            title="Supprimer cette pièce ?"
-                            onConfirm={() =>
-                                supprimerPiece(record.id)}
-                            okText="Oui"
-                            cancelText="Non"
-                            okButtonProps={{ danger: true }}
-                        >
+
+                    {role !== 'technicien' && (
+                        <Tooltip title="Modifier">
                             <Button
                                 type="text"
-                                icon={<DeleteOutlined />}
-                                style={{ color: '#f5222d' }}
+                                icon={<EditOutlined />}
+                                style={{ color: '#1890ff' }}
+                                onClick={() => ouvrirModifier(record)}
                             />
-                        </Popconfirm>
-                    </Tooltip>
+                        </Tooltip>
+                    )}
+
+                    {role !== 'technicien' && (
+                        <Tooltip title="Supprimer">
+                            <Popconfirm
+                                title="Supprimer cette pièce ?"
+                                onConfirm={() => supprimerPiece(record.id)}
+                                okText="Oui"
+                                cancelText="Non"
+                                okButtonProps={{ danger: true }}
+                            >
+                                <Button
+                                    type="text"
+                                    icon={<DeleteOutlined />}
+                                    style={{ color: '#f5222d' }}
+                                />
+                            </Popconfirm>
+                        </Tooltip>
+                    )}
                 </Space>
             )
         },
@@ -432,8 +394,7 @@ const Pieces = () => {
                         margin: '4px 0 0',
                         fontSize: 14
                     }}>
-                        {piecesFiltrees.length} pièce(s)
-                        au total
+                        {piecesFiltrees.length} pièce(s) au total
                     </p>
                 </div>
 
@@ -445,21 +406,24 @@ const Pieces = () => {
                     >
                         Actualiser
                     </Button>
-                    <Button
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        size="large"
-                        onClick={() => setModalCreer(true)}
-                        style={{
-                            background: '#FF8C00',
-                            borderColor: '#FF8C00',
-                            borderRadius: 10,
-                            fontWeight: 600,
-                            height: 44
-                        }}
-                    >
-                        Nouvelle pièce
-                    </Button>
+
+                    {role !== 'technicien' && (
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            size="large"
+                            onClick={() => setModalCreer(true)}
+                            style={{
+                                background: '#FF8C00',
+                                borderColor: '#FF8C00',
+                                borderRadius: 10,
+                                fontWeight: 600,
+                                height: 44
+                            }}
+                        >
+                            Nouvelle pièce
+                        </Button>
+                    )}
                 </Space>
             </div>
 
@@ -470,10 +434,7 @@ const Pieces = () => {
                     description="Veuillez réapprovisionner le stock de ces pièces."
                     type="error"
                     showIcon
-                    style={{
-                        borderRadius: 12,
-                        marginBottom: 16
-                    }}
+                    style={{ borderRadius: 12, marginBottom: 16 }}
                 />
             )}
 
@@ -487,17 +448,12 @@ const Pieces = () => {
                 }}
             >
                 <Input
-                    prefix={<SearchOutlined
-                        style={{ color: '#ccc' }} />}
+                    prefix={<SearchOutlined style={{ color: '#ccc' }} />}
                     placeholder="Rechercher par nom ou référence..."
                     value={search}
-                    onChange={(e) =>
-                        setSearch(e.target.value)}
+                    onChange={(e) => setSearch(e.target.value)}
                     allowClear
-                    style={{
-                        width: 340,
-                        borderRadius: 8
-                    }}
+                    style={{ width: 340, borderRadius: 8 }}
                 />
             </Card>
 
@@ -516,23 +472,17 @@ const Pieces = () => {
                     loading={loading}
                     pagination={{
                         pageSize: 10,
-                        showTotal: (total) =>
-                            `${total} pièces`
+                        showTotal: (total) => `${total} pièces`
                     }}
                     rowClassName={(record) =>
-                        record.en_rupture ?
-                            'row-rupture' : ''
+                        record.en_rupture ? 'row-rupture' : ''
                     }
                 />
             </Card>
 
             {/* ─── MODAL CRÉER ─── */}
             <Modal
-                title={
-                    <span style={{ fontWeight: 700 }}>
-                        ➕ Nouvelle pièce
-                    </span>
-                }
+                title={<span style={{ fontWeight: 700 }}>➕ Nouvelle pièce</span>}
                 open={modalCreer}
                 onCancel={() => {
                     setModalCreer(false);
@@ -541,19 +491,12 @@ const Pieces = () => {
                 footer={null}
                 width={580}
             >
-                <FormulairePiece
-                    form={form}
-                    onFinish={creerPiece}
-                />
+                <FormulairePiece form={form} onFinish={creerPiece} />
             </Modal>
 
             {/* ─── MODAL MODIFIER ─── */}
             <Modal
-                title={
-                    <span style={{ fontWeight: 700 }}>
-                        ✏️ Modifier pièce
-                    </span>
-                }
+                title={<span style={{ fontWeight: 700 }}>✏️ Modifier pièce</span>}
                 open={modalModifier}
                 onCancel={() => {
                     setModalModifier(false);
@@ -562,71 +505,46 @@ const Pieces = () => {
                 footer={null}
                 width={580}
             >
-                <FormulairePiece
-                    form={formModifier}
-                    onFinish={modifierPiece}
-                />
+                <FormulairePiece form={formModifier} onFinish={modifierPiece} />
             </Modal>
 
             {/* ─── DRAWER DÉTAIL ─── */}
             <Drawer
-                title={
-                    <span style={{ fontWeight: 700 }}>
-                        Détail pièce
-                    </span>
-                }
+                title={<span style={{ fontWeight: 700 }}>Détail pièce</span>}
                 open={drawerDetail}
                 onClose={() => setDrawerDetail(false)}
                 width={400}
             >
                 {pieceSelectionnee && (
-                    <Descriptions
-                        column={1}
-                        bordered
-                        size="small"
-                    >
+                    <Descriptions column={1} bordered size="small">
                         <Descriptions.Item label="Nom">
                             {pieceSelectionnee.nom}
                         </Descriptions.Item>
-                        <Descriptions.Item
-                            label="Référence">
-                            <span style={{
-                                fontFamily: 'monospace'
-                            }}>
+                        <Descriptions.Item label="Référence">
+                            <span style={{ fontFamily: 'monospace' }}>
                                 {pieceSelectionnee.reference}
                             </span>
                         </Descriptions.Item>
-                        <Descriptions.Item
-                            label="Quantité en stock">
+                        <Descriptions.Item label="Quantité en stock">
                             <span style={{
                                 fontWeight: 700,
-                                color: pieceSelectionnee
-                                    .en_rupture ?
+                                color: pieceSelectionnee.en_rupture ?
                                     '#f5222d' : '#52c41a'
                             }}>
-                                {pieceSelectionnee
-                                    .quantite_stock} unités
+                                {pieceSelectionnee.quantite_stock} unités
                             </span>
                         </Descriptions.Item>
-                        <Descriptions.Item
-                            label="Seuil minimum">
-                            {pieceSelectionnee
-                                .seuil_minimum} unités
+                        <Descriptions.Item label="Seuil minimum">
+                            {pieceSelectionnee.seuil_minimum} unités
                         </Descriptions.Item>
-                        <Descriptions.Item
-                            label="Prix unitaire">
-                            <span style={{
-                                color: '#FF8C00',
-                                fontWeight: 700
-                            }}>
-                                {pieceSelectionnee
-                                    .prix_unitaire} MAD
+                        <Descriptions.Item label="Prix unitaire">
+                            <span style={{ color: '#FF8C00', fontWeight: 700 }}>
+                                {pieceSelectionnee.prix_unitaire} MAD
                             </span>
                         </Descriptions.Item>
                         <Descriptions.Item label="État">
                             {pieceSelectionnee.en_rupture ?
-                                '🔴 Rupture de stock' :
-                                '🟢 En stock'}
+                                '🔴 Rupture de stock' : '🟢 En stock'}
                         </Descriptions.Item>
                     </Descriptions>
                 )}

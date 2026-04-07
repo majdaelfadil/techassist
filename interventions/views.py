@@ -165,9 +165,12 @@ class PieceListCreateView(
     serializer_class = PieceSerializer
 
     def get_permissions(self):
-        if self.request.method == 'POST':
-            return [EstResponsable()]
-        return [IsAuthenticated()]
+        # Technicien peut seulement lire
+        if self.request.method == 'GET':
+            return [IsAuthenticated()]
+        # Seul responsable peut créer
+        return [EstResponsable()]
+
 
 class PieceDetailView(
         generics.RetrieveUpdateDestroyAPIView):
@@ -175,8 +178,10 @@ class PieceDetailView(
     serializer_class = PieceSerializer
 
     def get_permissions(self):
+        # Tout le monde peut lire
         if self.request.method == 'GET':
             return [IsAuthenticated()]
+        # Seul responsable peut modifier/supprimer
         return [EstResponsable()]
 
 # ════════════════════════════════
@@ -855,3 +860,197 @@ class ValiderRapportView(APIView):
             'valide': rapport.valide,
             'date_validation': rapport.date_validation
         }, status=status.HTTP_200_OK)
+    
+# ─── AJOUTER PIECE UTILISEE ───
+class AjouterPieceUtiliseeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            intervention = Intervention.objects.get(
+                pk=pk)
+        except Intervention.DoesNotExist:
+            return Response(
+                {'erreur': 'Intervention non trouvée'},
+                status=status.HTTP_404_NOT_FOUND)
+
+        # Vérifier que c'est le bon technicien
+        user = request.user
+        if (hasattr(user, 'profil') and
+                user.profil.role == 'technicien'):
+            try:
+                tech = Technicien.objects.get(
+                    user=user)
+                if intervention.technicien != tech:
+                    return Response(
+                        {'erreur': 'Accès refusé'},
+                        status=status.HTTP_403_FORBIDDEN)
+            except Technicien.DoesNotExist:
+                return Response(
+                    {'erreur': 'Accès refusé'},
+                    status=status.HTTP_403_FORBIDDEN)
+
+        piece_id = request.data.get('piece_id')
+        quantite = request.data.get('quantite')
+
+        if not piece_id or not quantite:
+            return Response(
+                {'erreur': 'piece_id et quantite '
+                           'sont obligatoires'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            piece = Piece.objects.get(pk=piece_id)
+        except Piece.DoesNotExist:
+            return Response(
+                {'erreur': 'Pièce non trouvée'},
+                status=status.HTTP_404_NOT_FOUND)
+
+        # Vérifier le stock disponible
+        quantite = int(quantite)
+        if piece.quantite_stock < quantite:
+            return Response({
+                'erreur': 'Stock insuffisant',
+                'stock_disponible':
+                    piece.quantite_stock,
+                'quantite_demandee': quantite
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Vérifier si la pièce est déjà ajoutée
+        piece_utilisee_existante = (
+            PieceUtilisee.objects.filter(
+                intervention=intervention,
+                piece=piece
+            ).first()
+        )
+
+        if piece_utilisee_existante:
+            # Calculer la différence de quantité
+            ancienne_qte = (
+                piece_utilisee_existante.quantite)
+            difference = quantite - ancienne_qte
+
+            # Vérifier le stock pour la différence
+            if difference > 0 and \
+                    piece.quantite_stock < difference:
+                return Response({
+                    'erreur': 'Stock insuffisant',
+                    'stock_disponible':
+                        piece.quantite_stock,
+                    'quantite_supplementaire':
+                        difference
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Mettre à jour la quantité
+            piece_utilisee_existante.quantite = quantite
+            piece_utilisee_existante.prix_unitaire = (
+                piece.prix_unitaire)
+            piece_utilisee_existante.save()
+
+            # Mettre à jour le stock
+            piece.quantite_stock -= difference
+            piece.save()
+
+            return Response({
+                'message': 'Quantité mise à jour',
+                'piece': piece.nom,
+                'quantite': quantite,
+                'stock_restant': piece.quantite_stock,
+                'prix_unitaire': str(piece.prix_unitaire),
+                'sous_total': str(
+                    quantite * piece.prix_unitaire)
+            }, status=status.HTTP_200_OK)
+
+        # Créer la pièce utilisée
+        piece_utilisee = PieceUtilisee.objects.create(
+            intervention=intervention,
+            piece=piece,
+            quantite=quantite,
+            prix_unitaire=piece.prix_unitaire
+        )
+
+        # Décrémenter le stock
+        piece.quantite_stock -= quantite
+        piece.save()
+
+        return Response({
+            'message': 'Pièce ajoutée avec succès',
+            'piece': piece.nom,
+            'reference': piece.reference,
+            'quantite': quantite,
+            'stock_restant': piece.quantite_stock,
+            'prix_unitaire': str(piece.prix_unitaire),
+            'sous_total': str(
+                quantite * piece.prix_unitaire)
+        }, status=status.HTTP_201_CREATED)
+
+# ─── SUPPRIMER PIECE UTILISEE ───
+class SupprimerPieceUtiliseeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        try:
+            piece_utilisee = PieceUtilisee.objects.get(
+                pk=pk)
+        except PieceUtilisee.DoesNotExist:
+            return Response(
+                {'erreur': 'Pièce utilisée '
+                           'non trouvée'},
+                status=status.HTTP_404_NOT_FOUND)
+
+        # Vérifier que c'est le bon technicien
+        user = request.user
+        if (hasattr(user, 'profil') and
+                user.profil.role == 'technicien'):
+            try:
+                tech = Technicien.objects.get(
+                    user=user)
+                if (piece_utilisee.intervention
+                        .technicien != tech):
+                    return Response(
+                        {'erreur': 'Accès refusé'},
+                        status=status.HTTP_403_FORBIDDEN)
+            except Technicien.DoesNotExist:
+                return Response(
+                    {'erreur': 'Accès refusé'},
+                    status=status.HTTP_403_FORBIDDEN)
+
+        # Remettre le stock
+        piece = piece_utilisee.piece
+        piece.quantite_stock += piece_utilisee.quantite
+        piece.save()
+
+        piece_utilisee.delete()
+
+        return Response({
+            'message': 'Pièce retirée avec succès',
+            'stock_restaure': piece.quantite_stock
+        }, status=status.HTTP_200_OK)
+
+# ─── LISTE PIECES UTILISEES PAR INTERVENTION ───
+class ListePiecesUtiliseesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            intervention = Intervention.objects.get(
+                pk=pk)
+        except Intervention.DoesNotExist:
+            return Response(
+                {'erreur': 'Intervention non trouvée'},
+                status=status.HTTP_404_NOT_FOUND)
+
+        pieces = intervention.pieces_utilisees.all()
+        serializer = PieceUtiliseeSerializer(
+            pieces, many=True)
+
+        total = sum(
+            p.quantite * p.prix_unitaire
+            for p in pieces
+        )
+
+        return Response({
+            'intervention': intervention.numero,
+            'pieces': serializer.data,
+            'total_pieces': str(total)
+        })
