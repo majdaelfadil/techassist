@@ -25,9 +25,20 @@ const Factures = () => {
     const [loadingPDF, setLoadingPDF] = useState(false);
     const [loadingEmail, setLoadingEmail] = useState(false);
 
-    useEffect(() => {
+useEffect(() => {
         chargerFactures();
     }, [filtreStatut]);
+    // Auto-refresh toutes les 30s
+    useEffect(() => {
+        const interval = setInterval(chargerFactures, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Auto-refresh toutes les 30s
+    useEffect(() => {
+        const interval = setInterval(chargerFactures, 30000);
+        return () => clearInterval(interval);
+    }, []);
 
     // ─── CHARGER FACTURES ───
     const chargerFactures = async () => {
@@ -41,7 +52,6 @@ const Factures = () => {
             setLoading(false);
         }
     };
-
     // ─── TÉLÉCHARGER PDF ───
     const telechargerPDF = async (facture) => {
         setLoadingPDF(true);
@@ -68,7 +78,6 @@ const Factures = () => {
             setLoadingPDF(false);
         }
     };
-
     // ─── ENVOYER PAR EMAIL ───
     const envoyerEmail = async (facture) => {
         setLoadingEmail(true);
@@ -84,22 +93,18 @@ const Factures = () => {
             setLoadingEmail(false);
         }
     };
-
     // ─── OUVRIR DÉTAIL ───
     const ouvrirDetail = (facture) => {
         setFactureSelectionnee(facture);
         setDrawerDetail(true);
     };
-
     // ─── FILTRAGE LOCAL ───
     const facturesFiltrees = factures.filter(f =>
-        (f.numero?.toLowerCase().includes(
-            search.toLowerCase()) ||
-        f.intervention?.toString().includes(search)) &&
-        (filtreStatut === '' ||
-            f.statut === filtreStatut)
-    );
-
+        (f.numero?.toLowerCase().includes(search.toLowerCase()) ||
+         f.intervention?.numero?.toLowerCase().includes(search.toLowerCase()) ||
+         f.intervention?.client_nom?.toLowerCase().includes(search.toLowerCase())) &&
+        (!filtreStatut || f.statut === filtreStatut)
+    ).sort((a, b) => new Date(b.date_emission) - new Date(a.date_emission));
     // ─── STATS ───
     const totalTTC = factures.reduce(
         (sum, f) => sum + parseFloat(f.total_ttc || 0), 0
@@ -108,7 +113,6 @@ const Factures = () => {
         f => f.statut === 'payee').length;
     const facturesEnAttente = factures.filter(
         f => f.statut === 'envoyee').length;
-
     // ─── COULEURS STATUT ───
     const couleurStatut = {
         'brouillon': { color: '#666', bg: '#f5f5f5',
@@ -120,7 +124,6 @@ const Factures = () => {
         'annulee':   { color: '#f5222d', bg: '#fff1f0',
                        icon: <CloseCircleOutlined /> },
     };
-
     // ─── COLONNES ───
     const colonnes = [
         {
@@ -271,7 +274,6 @@ const Factures = () => {
             )
         },
     ];
-
     return (
         <div style={{ padding: 28 }}>
 
@@ -309,7 +311,6 @@ const Factures = () => {
                     Actualiser
                 </Button>
             </div>
-
             {/* ─── CARTES STATS ─── */}
             <Row gutter={[16, 16]}
                  style={{ marginBottom: 24 }}>
@@ -390,7 +391,6 @@ const Factures = () => {
                     </Card>
                 </Col>
             </Row>
-
             {/* ─── FILTRES ─── */}
             <Card
                 bordered={false}

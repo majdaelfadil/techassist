@@ -47,6 +47,11 @@ urlpatterns = [
          views.GenererRapportIAView.as_view(),
          name='generer-rapport-ia'),
 
+    # ── Assigner technicien avec vérification ──
+    path('interventions/<int:pk>/assigner-technicien/',
+         views.AssignerTechnicienView.as_view(),
+         name='assigner-technicien'),
+
     # ── Interventions : routes génériques APRÈS ──
     path('interventions/',
          views.InterventionListCreateView.as_view()),
@@ -80,4 +85,9 @@ urlpatterns = [
 
     # ── Planning Technicien ──
     path('technicien/planning/', views.MonPlanningView.as_view()),
+
+    # ── Vérifier disponibilité technicien ──
+    path('techniciens/verifier-disponibilite/',
+         views.VerifierDisponibiliteView.as_view(),
+         name='verifier-disponibilite'),
 ]

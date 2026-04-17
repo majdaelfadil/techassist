@@ -12,6 +12,7 @@ import Factures from './pages/Factures';
 import Planning from './pages/Planning';
 import AppLayout from './components/Layout';
 import authService from './services/authService';
+import Clients from './pages/Clients';
 
 const ProtectedRoute = ({ children, roles }) => {
     if (!authService.isAuthenticated()) {
@@ -88,6 +89,15 @@ function App() {
                         <ProtectedRoute
                             roles={['responsable']}>
                             <Factures />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/clients"
+                    element={
+                        <ProtectedRoute
+                            roles={['agent', 'responsable']}>
+                            <Clients />
                         </ProtectedRoute>
                     }
                 />

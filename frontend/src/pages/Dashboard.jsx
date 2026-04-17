@@ -10,6 +10,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid,
          Pie, Cell, Legend } from 'recharts';
 import api from '../services/api';
 
+
+
 const COLORS = ['#FF8C00', '#1A1A1A', '#4CAF50',
                 '#2196F3', '#9C27B0', '#F44336',
                 '#00BCD4', '#FFB347', '#666'];
@@ -85,6 +87,8 @@ const Dashboard = () => {
             setLoading(false);
         }
     };
+
+
 
     const colonnes = [
         {

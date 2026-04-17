@@ -94,60 +94,73 @@ const MesInterventions = () => {
     };
 
     // ─── SAUVEGARDER NOTES ───
-    const sauvegarderNotes = async (values) => {
-        setSavingNotes(true);
-        try {
-            const payload = {
-                notes_technicien: values.notes_technicien,
-            };
-            // N'envoyer duree_reelle que si elle est renseignée
-            if (values.duree_reelle !== undefined &&
-                values.duree_reelle !== null &&
-                values.duree_reelle !== '') {
-                payload.duree_reelle = values.duree_reelle;
-            }
-
-            await api.patch(
-                `/interventions/${interventionSelectionnee.id}/`,
-                payload
-            );
-
-            // Mettre à jour localement pour que le drawer rapport
-            // détecte les notes sans recharger
-            setInterventionSelectionnee(prev => ({
-                ...prev,
-                notes_technicien: values.notes_technicien,
-                duree_reelle: values.duree_reelle
-            }));
-
-            // Mettre à jour aussi dans la liste
-            setInterventions(prev =>
-                prev.map(i =>
-                    i.id === interventionSelectionnee.id
-                        ? {
-                            ...i,
-                            notes_technicien: values.notes_technicien,
-                            duree_reelle: values.duree_reelle
-                          }
-                        : i
-                )
-            );
-
-            message.success('Notes sauvegardées !');
-            setModalNotes(false);
-            formNotes.resetFields();
-        } catch (error) {
-            const erreur = error.response?.data;
-            console.error('Erreur sauvegarde notes:', erreur);
-            message.error(
-                erreur?.detail ||
-                JSON.stringify(erreur) ||
-                'Erreur sauvegarde'
-            );
-        } finally {
-            setSavingNotes(false);
+   const sauvegarderNotes = async (values) => {
+    setSavingNotes(true);
+    try {
+        const payload = {
+            notes_technicien: values.notes_technicien,
+        };
+        if (values.duree_reelle !== undefined &&
+            values.duree_reelle !== null &&
+            values.duree_reelle !== '') {
+            payload.duree_reelle = values.duree_reelle;
         }
-    };
+
+        await api.patch(
+            `/interventions/` +
+            `${interventionSelectionnee.id}/`,
+            payload
+        );
+
+        // ✅ Recharger depuis le serveur
+        // pour avoir les données fraîches
+        const res = await api.get(
+            `/interventions/` +
+            `${interventionSelectionnee.id}/`
+        );
+
+        const interventionMiseAJour = {
+            ...interventionSelectionnee,
+            notes_technicien:
+                res.data.notes_technicien,
+            duree_reelle: res.data.duree_reelle
+        };
+
+        // ✅ Mettre à jour l'intervention
+        // sélectionnée
+        setInterventionSelectionnee(
+            interventionMiseAJour);
+
+        // ✅ Mettre à jour dans la liste
+        setInterventions(prev =>
+            prev.map(i =>
+                i.id === interventionSelectionnee.id
+                    ? {
+                        ...i,
+                        notes_technicien:
+                            res.data.notes_technicien,
+                        duree_reelle:
+                            res.data.duree_reelle
+                      }
+                    : i
+            )
+        );
+
+        message.success('Notes sauvegardées !');
+        setModalNotes(false);
+        formNotes.resetFields();
+
+    } catch (error) {
+        const erreur = error.response?.data;
+        message.error(
+            erreur?.detail ||
+            JSON.stringify(erreur) ||
+            'Erreur sauvegarde'
+        );
+    } finally {
+        setSavingNotes(false);
+    }
+};
 
     // ─── AJOUTER PIÈCE UTILISÉE ───
     const ajouterPiece = async (values) => {
@@ -226,12 +239,22 @@ const MesInterventions = () => {
     };
 
     // ─── OUVRIR MODAL PIÈCES ───
-    const ouvrirModalPieces = async (intervention) => {
-        setInterventionSelectionnee(intervention);
-        await chargerPieces();
-        await chargerPiecesUtilisees(intervention.id);
-        setModalPieces(true);
+   const ouvrirModalPieces = async (intervention) => {
+    // ✅ Recharger depuis le serveur
+    const res = await api.get(
+        `/interventions/${intervention.id}/`
+    );
+    const interventionFraiche = {
+        ...intervention,
+        notes_technicien:
+            res.data.notes_technicien,
+        duree_reelle: res.data.duree_reelle
     };
+    setInterventionSelectionnee(interventionFraiche);
+    await chargerPieces();
+    await chargerPiecesUtilisees(intervention.id);
+    setModalPieces(true);
+};
 
     // ─── OUVRIR MODAL STATUT ───
     const ouvrirModalStatut = async (intervention) => {
@@ -241,35 +264,77 @@ const MesInterventions = () => {
     };
 
     // ─── OUVRIR MODAL NOTES ───
-    const ouvrirModalNotes = (intervention) => {
+  const ouvrirModalNotes = async (intervention) => {
+    // ✅ Recharger depuis le serveur
+    // pour avoir les notes à jour
+    try {
+        const res = await api.get(
+            `/interventions/${intervention.id}/`
+        );
+        const interventionFraiche = {
+            ...intervention,
+            notes_technicien:
+                res.data.notes_technicien,
+            duree_reelle: res.data.duree_reelle
+        };
+        setInterventionSelectionnee(
+            interventionFraiche);
+        formNotes.setFieldsValue({
+            notes_technicien:
+                res.data.notes_technicien || '',
+            duree_reelle:
+                res.data.duree_reelle || null
+        });
+    } catch (error) {
         setInterventionSelectionnee(intervention);
         formNotes.setFieldsValue({
-            notes_technicien: intervention.notes_technicien || '',
-            duree_reelle: intervention.duree_reelle || null
+            notes_technicien:
+                intervention.notes_technicien || '',
+            duree_reelle:
+                intervention.duree_reelle || null
         });
-        setModalNotes(true);
-    };
+    }
+    setModalNotes(true);
+};
 
     // ─── OUVRIR DRAWER RAPPORT ───
-    const ouvrirDrawerRapport = async (intervention) => {
+   const ouvrirDrawerRapport = async (intervention) => {
+    setDrawerRapport(true);
+    setRapport(null);
+
+    // ✅ Recharger depuis le serveur
+    // pour avoir les notes à jour
+    try {
+        const res = await api.get(
+            `/interventions/${intervention.id}/`
+        );
+        // Mettre à jour avec les données fraîches
+        const interventionFraiche = {
+            ...intervention,
+            notes_technicien:
+                res.data.notes_technicien,
+            duree_reelle: res.data.duree_reelle
+        };
+        setInterventionSelectionnee(
+            interventionFraiche);
+
+        // Charger le rapport s'il existe
+        if (res.data.rapport) {
+            setRapport({
+                rapport_id: res.data.rapport.id,
+                contenu: res.data.rapport.contenu,
+                genere_par_ia:
+                    res.data.rapport.genere_par_ia,
+                valide: res.data.rapport.valide
+            });
+            formRapport.setFieldsValue({
+                contenu: res.data.rapport.contenu
+            });
+        }
+    } catch (error) {
         setInterventionSelectionnee(intervention);
-        setRapport(null);
-        setDrawerRapport(true);
-        try {
-            const res = await api.get(`/interventions/${intervention.id}/`);
-            if (res.data.rapport) {
-                setRapport({
-                    rapport_id: res.data.rapport.id,
-                    contenu: res.data.rapport.contenu,
-                    genere_par_ia: res.data.rapport.genere_par_ia,
-                    valide: res.data.rapport.valide
-                });
-                formRapport.setFieldsValue({
-                    contenu: res.data.rapport.contenu
-                });
-            }
-        } catch (error) {}
-    };
+    }
+};
 
     // ─── COULEURS ───
     const couleurStatut = {

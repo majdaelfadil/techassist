@@ -35,8 +35,7 @@ class EstResponsable(BasePermission):
             return False
         if not hasattr(request.user, 'profil'):
             return True
-        return request.user.profil.role == \
-               'responsable'
+        return request.user.profil.role == 'responsable'
 
 class EstAgentOuResponsable(BasePermission):
     def has_permission(self, request, view):
@@ -44,8 +43,7 @@ class EstAgentOuResponsable(BasePermission):
             return False
         if not hasattr(request.user, 'profil'):
             return True
-        return request.user.profil.role in \
-               ['agent', 'responsable']
+        return request.user.profil.role in ['agent', 'responsable']
 
 class EstTechnicien(BasePermission):
     def has_permission(self, request, view):
@@ -53,34 +51,27 @@ class EstTechnicien(BasePermission):
             return False
         if not hasattr(request.user, 'profil'):
             return True
-        return request.user.profil.role == \
-               'technicien'
+        return request.user.profil.role == 'technicien'
 
 # ════════════════════════════════
 # ─── CLIENTS ───
 # ════════════════════════════════
 
-class ClientListCreateView(
-        generics.ListCreateAPIView):
+class ClientListCreateView(generics.ListCreateAPIView):
     serializer_class = ClientSerializer
     permission_classes = [EstAgentOuResponsable]
 
     def get_queryset(self):
         queryset = Client.objects.all()
-        search = self.request.query_params.get(
-            'search')
-        telephone = self.request.query_params.get(
-            'telephone')
+        search = self.request.query_params.get('search')
+        telephone = self.request.query_params.get('telephone')
         if search:
-            queryset = queryset.filter(
-                nom__icontains=search)
+            queryset = queryset.filter(nom__icontains=search)
         if telephone:
-            queryset = queryset.filter(
-                telephone__icontains=telephone)
+            queryset = queryset.filter(telephone__icontains=telephone)
         return queryset
 
-class ClientDetailView(
-        generics.RetrieveUpdateDestroyAPIView):
+class ClientDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
     permission_classes = [EstAgentOuResponsable]
@@ -89,8 +80,7 @@ class ClientDetailView(
 # ─── TECHNICIENS ───
 # ════════════════════════════════
 
-class TechnicienListView(
-        generics.ListCreateAPIView):
+class TechnicienListView(generics.ListCreateAPIView):
     serializer_class = TechnicienSerializer
 
     def get_permissions(self):
@@ -100,15 +90,12 @@ class TechnicienListView(
 
     def get_queryset(self):
         queryset = Technicien.objects.all()
-        disponible = self.request.query_params.get(
-            'disponible')
+        disponible = self.request.query_params.get('disponible')
         if disponible:
-            queryset = queryset.filter(
-                disponible=True)
+            queryset = queryset.filter(disponible=True)
         return queryset
 
-class TechnicienDetailView(
-        generics.RetrieveUpdateDestroyAPIView):
+class TechnicienDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Technicien.objects.all()
     serializer_class = TechnicienSerializer
     permission_classes = [EstResponsable]
@@ -117,16 +104,14 @@ class TechnicienDetailView(
 # ─── AGENTS ───
 # ════════════════════════════════
 
-class AgentListCreateView(
-        generics.ListCreateAPIView):
+class AgentListCreateView(generics.ListCreateAPIView):
     serializer_class = AgentSerializer
     permission_classes = [EstResponsable]
 
     def get_queryset(self):
         return Agent.objects.all()
 
-class AgentDetailView(
-        generics.RetrieveUpdateDestroyAPIView):
+class AgentDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Agent.objects.all()
     serializer_class = AgentSerializer
     permission_classes = [EstResponsable]
@@ -135,22 +120,18 @@ class AgentDetailView(
 # ─── APPAREILS ───
 # ════════════════════════════════
 
-class AppareilListCreateView(
-        generics.ListCreateAPIView):
+class AppareilListCreateView(generics.ListCreateAPIView):
     serializer_class = AppareilSerializer
     permission_classes = [EstAgentOuResponsable]
 
     def get_queryset(self):
         queryset = Appareil.objects.all()
-        client_id = self.request.query_params.get(
-            'client_id')
+        client_id = self.request.query_params.get('client_id')
         if client_id:
-            queryset = queryset.filter(
-                client_id=client_id)
+            queryset = queryset.filter(client_id=client_id)
         return queryset
 
-class AppareilDetailView(
-        generics.RetrieveUpdateAPIView):
+class AppareilDetailView(generics.RetrieveUpdateAPIView):
     queryset = Appareil.objects.all()
     serializer_class = AppareilSerializer
     permission_classes = [EstAgentOuResponsable]
@@ -159,37 +140,29 @@ class AppareilDetailView(
 # ─── PIECES ───
 # ════════════════════════════════
 
-class PieceListCreateView(
-        generics.ListCreateAPIView):
+class PieceListCreateView(generics.ListCreateAPIView):
     queryset = Piece.objects.all()
     serializer_class = PieceSerializer
 
     def get_permissions(self):
-        # Technicien peut seulement lire
         if self.request.method == 'GET':
             return [IsAuthenticated()]
-        # Seul responsable peut créer
         return [EstResponsable()]
 
-
-class PieceDetailView(
-        generics.RetrieveUpdateDestroyAPIView):
+class PieceDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Piece.objects.all()
     serializer_class = PieceSerializer
 
     def get_permissions(self):
-        # Tout le monde peut lire
         if self.request.method == 'GET':
             return [IsAuthenticated()]
-        # Seul responsable peut modifier/supprimer
         return [EstResponsable()]
 
 # ════════════════════════════════
 # ─── INTERVENTIONS ───
 # ════════════════════════════════
 
-class InterventionListCreateView(
-        generics.ListCreateAPIView):
+class InterventionListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
@@ -205,43 +178,33 @@ class InterventionListCreateView(
         user = self.request.user
         queryset = Intervention.objects.all()
 
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
-                technicien = Technicien.objects.get(
-                    user=user)
-                queryset = queryset.filter(
-                    technicien=technicien)
+                technicien = Technicien.objects.get(user=user)
+                queryset = queryset.filter(technicien=technicien)
             except Technicien.DoesNotExist:
                 queryset = queryset.none()
 
-        statut = self.request.query_params.get(
-            'statut')
-        urgence = self.request.query_params.get(
-            'urgence')
-        technicien_id = self.request.query_params.get(
-            'technicien_id')
-        client_id = self.request.query_params.get(
-            'client_id')
+        statut = self.request.query_params.get('statut')
+        urgence = self.request.query_params.get('urgence')
+        technicien_id = self.request.query_params.get('technicien_id')
+        client_id = self.request.query_params.get('client_id')
 
         if statut:
             queryset = queryset.filter(statut=statut)
         if urgence:
             queryset = queryset.filter(urgence=urgence)
         if technicien_id:
-            queryset = queryset.filter(
-                technicien_id=technicien_id)
+            queryset = queryset.filter(technicien_id=technicien_id)
         if client_id:
-            queryset = queryset.filter(
-                client_id=client_id)
+            queryset = queryset.filter(client_id=client_id)
 
         return queryset
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
-class InterventionDetailView(
-        generics.RetrieveUpdateDestroyAPIView):
+class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Intervention.objects.all()
     serializer_class = InterventionDetailSerializer
 
@@ -252,30 +215,64 @@ class InterventionDetailView(
 
     def update(self, request, *args, **kwargs):
         user = request.user
-
-        # Technicien peut seulement modifier
-        # notes_technicien et duree_reelle
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
-            champs_autorises = {
-                'notes_technicien',
-                'duree_reelle'
-            }
+        intervention = self.get_object()
+        
+        # Vérifier la disponibilité si on modifie le technicien ou la date
+        technicien_id = request.data.get('technicien_id')
+        date_planifiee = request.data.get('date_planifiee')
+        duree_estimee = request.data.get('duree_estimee')
+        
+        if technicien_id or date_planifiee or duree_estimee:
+            from datetime import datetime, timedelta
+            import pytz
+            
+            tech_id = technicien_id or (intervention.technicien_id if intervention.technicien else None)
+            date_plan = date_planifiee or intervention.date_planifiee
+            duree = float(duree_estimee or intervention.duree_estimee or 1)
+            
+            if tech_id and date_plan:
+                try:
+                    technicien = Technicien.objects.get(pk=tech_id)
+                    
+                    if isinstance(date_plan, str):
+                        date_debut = datetime.fromisoformat(date_plan.replace('Z', '+00:00'))
+                    else:
+                        date_debut = date_plan
+                    
+                    date_fin = date_debut + timedelta(hours=duree)
+                    
+                    conflits = Intervention.objects.filter(
+                        technicien=technicien,
+                        date_planifiee__isnull=False,
+                        statut__in=['assigne', 'en_cours', 'attente_pieces']
+                    ).exclude(pk=intervention.pk)
+                    
+                    for autre in conflits:
+                        duree_autre = float(autre.duree_estimee or 1)
+                        fin_autre = autre.date_planifiee + timedelta(hours=duree_autre)
+                        
+                        if date_debut < fin_autre and date_fin > autre.date_planifiee:
+                            return Response({
+                                'erreur': 'Conflit de planning',
+                                'message': f'Le technicien est déjà occupé du {autre.date_planifiee.strftime("%d/%m/%Y %H:%M")} au {fin_autre.strftime("%H:%M")} pour l\'intervention {autre.numero}'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                except Technicien.DoesNotExist:
+                    pass
+        
+        # Technicien peut seulement modifier notes_technicien et duree_reelle
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
+            champs_autorises = {'notes_technicien', 'duree_reelle'}
             champs_envoyes = set(request.data.keys())
-            champs_interdits = (
-                champs_envoyes - champs_autorises)
+            champs_interdits = champs_envoyes - champs_autorises
 
             if champs_interdits:
                 return Response({
                     'erreur': 'Accès refusé',
-                    'champs_interdits':
-                        list(champs_interdits),
-                    'champs_autorises':
-                        list(champs_autorises)
+                    'champs_interdits': list(champs_interdits),
+                    'champs_autorises': list(champs_autorises)
                 }, status=status.HTTP_403_FORBIDDEN)
 
-        return super().update(
-            request, *args, **kwargs)
+        return super().update(request, *args, **kwargs)
 
 # ─── CHANGER STATUT ───
 class InterventionChangerStatutView(APIView):
@@ -283,19 +280,16 @@ class InterventionChangerStatutView(APIView):
 
     def post(self, request, pk):
         try:
-            intervention = Intervention.objects.get(
-                pk=pk)
+            intervention = Intervention.objects.get(pk=pk)
         except Intervention.DoesNotExist:
             return Response(
                 {'erreur': 'Intervention non trouvée'},
                 status=status.HTTP_404_NOT_FOUND)
 
         user = request.user
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
-                tech = Technicien.objects.get(
-                    user=user)
+                tech = Technicien.objects.get(user=user)
                 if intervention.technicien != tech:
                     return Response(
                         {'erreur': 'Accès refusé'},
@@ -312,10 +306,8 @@ class InterventionChangerStatutView(APIView):
                 {'erreur': 'Statut manquant'},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        if not transition_autorisee(
-                intervention.statut, nouveau_statut):
-            transitions = get_transitions_possibles(
-                intervention.statut)
+        if not transition_autorisee(intervention.statut, nouveau_statut):
+            transitions = get_transitions_possibles(intervention.statut)
             return Response({
                 'erreur': 'Transition non autorisée',
                 'statut_actuel': intervention.statut,
@@ -334,9 +326,7 @@ class InterventionChangerStatutView(APIView):
             'message': 'Statut changé avec succès',
             'ancien_statut': ancien_statut,
             'nouveau_statut': nouveau_statut,
-            'transitions_possibles':
-                get_transitions_possibles(
-                    nouveau_statut)
+            'transitions_possibles': get_transitions_possibles(nouveau_statut)
         }, status=status.HTTP_200_OK)
 
 # ─── TRANSITIONS POSSIBLES ───
@@ -345,15 +335,13 @@ class InterventionTransitionsView(APIView):
 
     def get(self, request, pk):
         try:
-            intervention = Intervention.objects.get(
-                pk=pk)
+            intervention = Intervention.objects.get(pk=pk)
         except Intervention.DoesNotExist:
             return Response(
                 {'erreur': 'Intervention non trouvée'},
                 status=status.HTTP_404_NOT_FOUND)
 
-        transitions = get_transitions_possibles(
-            intervention.statut)
+        transitions = get_transitions_possibles(intervention.statut)
 
         return Response({
             'statut_actuel': intervention.statut,
@@ -366,8 +354,7 @@ class InterventionValiderView(APIView):
 
     def post(self, request, pk):
         try:
-            intervention = Intervention.objects.get(
-                pk=pk)
+            intervention = Intervention.objects.get(pk=pk)
         except Intervention.DoesNotExist:
             return Response(
                 {'erreur': 'Intervention non trouvée'},
@@ -375,47 +362,37 @@ class InterventionValiderView(APIView):
 
         if intervention.statut != 'termine':
             return Response({
-                'erreur':
-                    'Intervention doit être terminée',
+                'erreur': 'Intervention doit être terminée',
                 'statut_actuel': intervention.statut
             }, status=status.HTTP_400_BAD_REQUEST)
 
         montant_pieces = sum(
             p.quantite * p.prix_unitaire
-            for p in
-            intervention.pieces_utilisees.all()
+            for p in intervention.pieces_utilisees.all()
         )
 
-        duree = (intervention.duree_reelle or
-                 intervention.duree_estimee or 1)
+        duree = (intervention.duree_reelle or intervention.duree_estimee or 1)
         technicien = intervention.technicien
-        tarif = (technicien.tarif_horaire
-                 if technicien else 150)
-        montant_main_oeuvre = (float(duree) *
-                               float(tarif))
+        tarif = (technicien.tarif_horaire if technicien else 150)
+        montant_main_oeuvre = (float(duree) * float(tarif))
 
-        facture, created = \
-            Facture.objects.get_or_create(
-                intervention=intervention,
-                defaults={
-                    'montant_main_oeuvre':
-                        montant_main_oeuvre,
-                    'montant_pieces': montant_pieces,
-                    'montant_deplacement': 0,
-                    'tva': 20,
-                    'statut': 'brouillon'
-                }
-            )
+        facture, created = Facture.objects.get_or_create(
+            intervention=intervention,
+            defaults={
+                'montant_main_oeuvre': montant_main_oeuvre,
+                'montant_pieces': montant_pieces,
+                'montant_deplacement': 0,
+                'tva': 20,
+                'statut': 'brouillon'
+            }
+        )
 
         intervention.statut = 'valide'
         intervention.save()
 
         return Response({
-            'message':
-                'Intervention validée et '
-                'facture générée',
-            'intervention_statut':
-                intervention.statut,
+            'message': 'Intervention validée et facture générée',
+            'intervention_statut': intervention.statut,
             'facture': {
                 'numero': facture.numero,
                 'total_ht': facture.total_ht,
@@ -428,8 +405,7 @@ class InterventionValiderView(APIView):
 # ─── RAPPORTS ───
 # ════════════════════════════════
 
-class RapportListCreateView(
-        generics.ListCreateAPIView):
+class RapportListCreateView(generics.ListCreateAPIView):
     serializer_class = RapportSerializer
     permission_classes = [IsAuthenticated]
 
@@ -437,20 +413,16 @@ class RapportListCreateView(
         user = self.request.user
         queryset = Rapport.objects.all()
 
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
-                tech = Technicien.objects.get(
-                    user=user)
-                queryset = queryset.filter(
-                    intervention__technicien=tech)
+                tech = Technicien.objects.get(user=user)
+                queryset = queryset.filter(intervention__technicien=tech)
             except Technicien.DoesNotExist:
                 queryset = queryset.none()
 
         return queryset
 
-class RapportDetailView(
-        generics.RetrieveUpdateAPIView):
+class RapportDetailView(generics.RetrieveUpdateAPIView):
     queryset = Rapport.objects.all()
     serializer_class = RapportSerializer
     permission_classes = [IsAuthenticated]
@@ -477,13 +449,243 @@ class MonPlanningView(APIView):
             date_planifiee__isnull=False
         ).order_by('date_planifiee')
 
-        serializer = InterventionListSerializer(
-            interventions, many=True)
+        serializer = InterventionListSerializer(interventions, many=True)
 
         return Response({
             'technicien': tech.nom,
             'interventions': serializer.data
         })
+
+# ─── VÉRIFIER DISPONIBILITÉ TECHNICIEN ───
+class VerifierDisponibiliteView(APIView):
+    permission_classes = [EstAgentOuResponsable]
+
+    def post(self, request):
+        technicien_id = request.data.get('technicien_id')
+        date_planifiee = request.data.get('date_planifiee')
+        duree_estimee = request.data.get('duree_estimee', 1)
+        intervention_id = request.data.get('intervention_id')
+
+        if not technicien_id or not date_planifiee:
+            return Response({
+                'erreur': 'technicien_id et date_planifiee obligatoires'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            technicien = Technicien.objects.get(pk=technicien_id)
+        except Technicien.DoesNotExist:
+            return Response(
+                {'erreur': 'Technicien non trouvé'},
+                status=status.HTTP_404_NOT_FOUND)
+
+        from datetime import datetime, timedelta
+        import pytz
+
+        try:
+            if isinstance(date_planifiee, str):
+                date_debut = datetime.fromisoformat(date_planifiee.replace('Z', '+00:00'))
+            else:
+                date_debut = date_planifiee
+        except Exception:
+            return Response({
+                'erreur': 'Format date invalide'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        tz_maroc = pytz.timezone('Africa/Casablanca')
+        date_locale = date_debut.astimezone(tz_maroc)
+        jour_semaine = date_locale.weekday()
+        heure = date_locale.hour
+        minute = date_locale.minute
+        heure_decimal = heure + minute / 60
+
+        try:
+            duree = float(duree_estimee)
+            if duree <= 0:
+                raise ValueError()
+        except (TypeError, ValueError):
+            return Response({
+                'disponible': False,
+                'raison': 'duree_invalide',
+                'message': 'La durée estimée doit être un nombre positif'
+            }, status=status.HTTP_200_OK)
+
+        date_fin = date_debut + timedelta(hours=duree)
+        date_fin_locale = date_fin.astimezone(tz_maroc)
+        heure_fin = date_fin_locale.hour + date_fin_locale.minute / 60
+
+        if jour_semaine == 6:
+            return Response({
+                'disponible': False,
+                'raison': 'dimanche',
+                'message': 'Aucune intervention le dimanche.',
+            }, status=status.HTTP_200_OK)
+
+        matin_debut, matin_fin = 8.5, 13.0
+        aprem_debut, aprem_fin = 15.0, 19.0
+
+        dans_matin = matin_debut <= heure_decimal < matin_fin
+        dans_aprem = (aprem_debut <= heure_decimal < aprem_fin and jour_semaine < 5)
+
+        if not dans_matin and not dans_aprem:
+            if jour_semaine == 5:
+                message = f'Le samedi, les interventions sont uniquement de 08h30 à 13h00. Heure demandée : {date_locale.strftime("%H:%M")}'
+            else:
+                message = f'Heure {date_locale.strftime("%H:%M")} en dehors des horaires de travail. Horaires : 8h30-13h00 et 15h00-19h00'
+            return Response({
+                'disponible': False,
+                'raison': 'hors_horaires',
+                'message': message,
+            }, status=status.HTTP_200_OK)
+
+        if dans_matin and heure_fin > matin_fin:
+            return Response({
+                'disponible': False,
+                'raison': 'depasse_horaires',
+                'message': f'L\'intervention se termine à {date_fin_locale.strftime("%H:%M")} et dépasse la fin de matinée (13h00).',
+                'suggestion': 'Réduisez la durée ou planifiez après 15h00' if jour_semaine < 5 else 'Réduisez la durée estimée'
+            }, status=status.HTTP_200_OK)
+
+        if dans_aprem and heure_fin > aprem_fin:
+            return Response({
+                'disponible': False,
+                'raison': 'depasse_horaires',
+                'message': f'L\'intervention se termine à {date_fin_locale.strftime("%H:%M")} et dépasse la fin de journée (19h00).',
+                'suggestion': 'Réduisez la durée ou planifiez le lendemain matin'
+            }, status=status.HTTP_200_OK)
+
+        qs = Intervention.objects.filter(
+            technicien=technicien,
+            date_planifiee__isnull=False,
+            statut__in=['assigne', 'en_cours', 'attente_pieces']
+        )
+        if intervention_id:
+            qs = qs.exclude(pk=intervention_id)
+
+        conflits = []
+        temps_total_chevauchant = 0
+
+        for i in qs:
+            duree_i = float(i.duree_estimee or 1)
+            debut_i = i.date_planifiee
+            fin_i = debut_i + timedelta(hours=duree_i)
+            
+            if date_debut < fin_i and date_fin > debut_i:
+                debut_chevauch = max(date_debut, debut_i)
+                fin_chevauch = min(date_fin, fin_i)
+                duree_chevauch = (fin_chevauch - debut_chevauch).total_seconds() / 3600
+                temps_total_chevauchant += duree_chevauch
+                
+                conflits.append({
+                    'numero': i.numero,
+                    'client': i.client.nom,
+                    'debut': debut_i.strftime('%d/%m/%Y %H:%M'),
+                    'fin': fin_i.strftime('%d/%m/%Y %H:%M'),
+                    'duree': f'{duree_i}h',
+                    'chevauchenent': f'{duree_chevauch:.1f}h'
+                })
+
+        if conflits:
+            return Response({
+                'disponible': False,
+                'raison': 'conflit',
+                'message': f'Le technicien {technicien.nom} a déjà {len(conflits)} intervention(s) qui chevauchent cette période (total chevauchement: {temps_total_chevauchant:.1f}h).',
+                'conflits': conflits,
+                'suggestion': 'Choisissez une autre date ou horaire'
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            'disponible': True,
+            'message': f'{technicien.nom} est disponible du {date_locale.strftime("%d/%m/%Y à %H:%M")} au {date_fin_locale.strftime("%H:%M")}.',
+            'technicien': technicien.nom,
+            'date_debut': date_locale.strftime('%d/%m/%Y %H:%M'),
+            'date_fin': date_fin_locale.strftime('%d/%m/%Y %H:%M'),
+            'duree_estimee': f'{duree}h'
+        }, status=status.HTTP_200_OK)
+
+# ─── ASSIGNER TECHNICIEN AVEC VÉRIFICATION ───
+class AssignerTechnicienView(APIView):
+    permission_classes = [EstAgentOuResponsable]
+
+    def post(self, request, pk):
+        try:
+            intervention = Intervention.objects.get(pk=pk)
+        except Intervention.DoesNotExist:
+            return Response(
+                {'erreur': 'Intervention non trouvée'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        technicien_id = request.data.get('technicien_id')
+        date_planifiee = request.data.get('date_planifiee')
+        duree_estimee = request.data.get('duree_estimee', 1)
+
+        if not technicien_id or not date_planifiee:
+            return Response(
+                {'erreur': 'technicien_id et date_planifiee obligatoires'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            technicien = Technicien.objects.get(pk=technicien_id)
+        except Technicien.DoesNotExist:
+            return Response(
+                {'erreur': 'Technicien non trouvé'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        from datetime import datetime, timedelta
+        import pytz
+
+        if isinstance(date_planifiee, str):
+            date_debut = datetime.fromisoformat(date_planifiee.replace('Z', '+00:00'))
+        else:
+            date_debut = date_planifiee
+
+        duree = float(duree_estimee)
+        date_fin = date_debut + timedelta(hours=duree)
+
+        conflits = Intervention.objects.filter(
+            technicien=technicien,
+            date_planifiee__isnull=False,
+            statut__in=['assigne', 'en_cours', 'attente_pieces']
+        ).exclude(pk=intervention.pk)
+
+        for autre in conflits:
+            duree_autre = float(autre.duree_estimee or 1)
+            fin_autre = autre.date_planifiee + timedelta(hours=duree_autre)
+
+            if date_debut < fin_autre and date_fin > autre.date_planifiee:
+                return Response({
+                    'erreur': 'Conflit de planning',
+                    'message': f'Le technicien est déjà occupé du {autre.date_planifiee.strftime("%d/%m/%Y %H:%M")} au {fin_autre.strftime("%H:%M")} pour l\'intervention {autre.numero}',
+                    'conflit': {
+                        'intervention': autre.numero,
+                        'client': autre.client.nom,
+                        'debut': autre.date_planifiee.strftime('%d/%m/%Y %H:%M'),
+                        'fin': fin_autre.strftime('%d/%m/%Y %H:%M')
+                    }
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        intervention.technicien = technicien
+        intervention.date_planifiee = date_debut
+        intervention.duree_estimee = duree
+
+        if intervention.statut == 'nouveau':
+            intervention.statut = 'assigne'
+
+        intervention.save()
+
+        return Response({
+            'message': 'Technicien assigné avec succès',
+            'intervention': {
+                'id': intervention.id,
+                'numero': intervention.numero,
+                'technicien': technicien.nom,
+                'date_planifiee': intervention.date_planifiee,
+                'duree_estimee': intervention.duree_estimee,
+                'statut': intervention.statut
+            }
+        }, status=status.HTTP_200_OK)
 
 # ════════════════════════════════
 # ─── FACTURES ───
@@ -494,8 +696,7 @@ class FactureListView(generics.ListAPIView):
     serializer_class = FactureSerializer
     permission_classes = [EstResponsable]
 
-class FactureDetailView(
-        generics.RetrieveUpdateAPIView):
+class FactureDetailView(generics.RetrieveUpdateAPIView):
     queryset = Facture.objects.all()
     serializer_class = FactureSerializer
     permission_classes = [EstResponsable]
@@ -512,12 +713,8 @@ class FacturePDFView(APIView):
                 status=status.HTTP_404_NOT_FOUND)
 
         buffer = generer_facture_pdf(facture)
-        response = HttpResponse(
-            buffer,
-            content_type='application/pdf')
-        response['Content-Disposition'] = (
-            f'attachment; filename='
-            f'"facture_{facture.numero}.pdf"')
+        response = HttpResponse(buffer, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="facture_{facture.numero}.pdf"'
         return response
 
 # ════════════════════════════════
@@ -529,8 +726,7 @@ class EnvoyerEmailTechnicienView(APIView):
 
     def post(self, request, pk):
         try:
-            intervention = Intervention.objects.get(
-                pk=pk)
+            intervention = Intervention.objects.get(pk=pk)
         except Intervention.DoesNotExist:
             return Response(
                 {'erreur': 'Intervention non trouvée'},
@@ -541,14 +737,12 @@ class EnvoyerEmailTechnicienView(APIView):
                 {'erreur': 'Aucun technicien assigné'},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        resultat = envoyer_notification_technicien(
-            intervention)
+        resultat = envoyer_notification_technicien(intervention)
 
         if resultat:
             return Response({
                 'message': 'Email envoyé au technicien',
-                'technicien':
-                    intervention.technicien.nom
+                'technicien': intervention.technicien.nom
             })
         return Response(
             {'erreur': 'Échec envoi email'},
@@ -575,10 +769,8 @@ class EnvoyerFactureEmailView(APIView):
         if resultat:
             return Response({
                 'message': 'Facture envoyée par email',
-                'client':
-                    facture.intervention.client.nom,
-                'email':
-                    facture.intervention.client.email
+                'client': facture.intervention.client.nom,
+                'email': facture.intervention.client.email
             })
         return Response(
             {'erreur': 'Échec envoi email'},
@@ -594,8 +786,7 @@ class MonProfilView(APIView):
     def get(self, request):
         user = request.user
         role = 'responsable'
-        nom = (user.get_full_name() or
-               user.username)
+        nom = (user.get_full_name() or user.username)
         telephone = ''
         technicien_id = None
         agent_id = None
@@ -605,8 +796,7 @@ class MonProfilView(APIView):
 
         if role == 'technicien':
             try:
-                tech = Technicien.objects.get(
-                    user=user)
+                tech = Technicien.objects.get(user=user)
                 nom = tech.nom
                 telephone = tech.telephone
                 technicien_id = tech.id
@@ -644,82 +834,53 @@ class DashboardStatsView(APIView):
         user = request.user
         aujourd_hui = timezone.now().date()
 
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
-                tech = Technicien.objects.get(
-                    user=user)
-                interventions_qs = (
-                    Intervention.objects.filter(
-                        technicien=tech))
+                tech = Technicien.objects.get(user=user)
+                interventions_qs = Intervention.objects.filter(technicien=tech)
             except Technicien.DoesNotExist:
-                interventions_qs = (
-                    Intervention.objects.none())
+                interventions_qs = Intervention.objects.none()
         else:
-            interventions_qs = (
-                Intervention.objects.all())
+            interventions_qs = Intervention.objects.all()
 
         stats = {
-            'interventions_aujourd_hui':
-                interventions_qs.filter(
-                    date_creation__date=
-                    aujourd_hui).count(),
-            'interventions_en_cours':
-                interventions_qs.filter(
-                    statut='en_cours').count(),
-            'interventions_en_retard':
-                interventions_qs.filter(
-                    date_planifiee__lt=timezone.now(),
-                    statut__in=[
-                        'nouveau', 'diagnostique',
-                        'assigne', 'en_cours']
-                ).count(),
-            'interventions_terminees':
-                interventions_qs.filter(
-                    statut='termine').count(),
-            'total_interventions':
-                interventions_qs.count(),
-            'techniciens_disponibles':
-                Technicien.objects.filter(
-                    disponible=True).count(),
-            'pieces_en_rupture':
-                Piece.objects.filter(
-                    quantite_stock__lte=F(
-                        'seuil_minimum')).count(),
+            'interventions_aujourd_hui': interventions_qs.filter(date_creation__date=aujourd_hui).count(),
+            'interventions_en_cours': interventions_qs.filter(statut='en_cours').count(),
+            'interventions_en_retard': interventions_qs.filter(
+                date_planifiee__lt=timezone.now(),
+                statut__in=['nouveau', 'diagnostique', 'assigne', 'en_cours']
+            ).count(),
+            'interventions_terminees': interventions_qs.filter(statut='termine').count(),
+            'total_interventions': interventions_qs.count(),
+            'techniciens_disponibles': Technicien.objects.filter(disponible=True).count(),
+            'pieces_en_rupture': Piece.objects.filter(quantite_stock__lte=F('seuil_minimum')).count(),
         }
 
-        par_statut = interventions_qs.values(
-            'statut').annotate(count=Count('id'))
-
-        par_type = interventions_qs.values(
-            'type_service').annotate(
-            count=Count('id'))
+        par_statut = interventions_qs.values('statut').annotate(count=Count('id'))
+        par_type = interventions_qs.values('type_service').annotate(count=Count('id'))
 
         return Response({
             'stats': stats,
             'par_statut': list(par_statut),
             'par_type': list(par_type),
         })
+
 # ─── GÉNÉRER RAPPORT IA ───
 class GenererRapportIAView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         try:
-            intervention = Intervention.objects.get(
-                pk=pk)
+            intervention = Intervention.objects.get(pk=pk)
         except Intervention.DoesNotExist:
             return Response(
                 {'erreur': 'Intervention non trouvée'},
                 status=status.HTTP_404_NOT_FOUND)
 
-        # Vérifier que c'est le bon technicien
         user = request.user
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
-                tech = Technicien.objects.get(
-                    user=user)
+                tech = Technicien.objects.get(user=user)
                 if intervention.technicien != tech:
                     return Response(
                         {'erreur': 'Accès refusé'},
@@ -729,21 +890,17 @@ class GenererRapportIAView(APIView):
                     {'erreur': 'Accès refusé'},
                     status=status.HTTP_403_FORBIDDEN)
 
-        # Vérifier que des notes existent
         if not intervention.notes_technicien:
             return Response({
-                'erreur':
-                    'Saisissez d\'abord vos notes'
+                'erreur': 'Saisissez d\'abord vos notes'
             }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             import google.generativeai as genai
             import os
 
-            genai.configure(
-                api_key=os.getenv('GEMINI_API_KEY'))
-            model = genai.GenerativeModel(
-                'gemini-pro')
+            genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+            model = genai.GenerativeModel('gemini-pro')
 
             prompt = f"""
 Tu es un expert en maintenance informatique.
@@ -753,11 +910,7 @@ basé sur ces informations :
 INTERVENTION : {intervention.numero}
 CLIENT : {intervention.client.nom}
 TYPE : {intervention.type_service}
-APPAREIL : {
-    f"{intervention.appareil.marque} "
-    f"{intervention.appareil.modele}"
-    if intervention.appareil else "Non spécifié"
-}
+APPAREIL : {f"{intervention.appareil.marque} {intervention.appareil.modele}" if intervention.appareil else "Non spécifié"}
 DESCRIPTION DU PROBLÈME :
 {intervention.description}
 
@@ -778,7 +931,6 @@ Rédige en français de manière professionnelle.
             contenu_rapport = response.text
 
         except Exception as e:
-            # Si Gemini non configuré — rapport basique
             contenu_rapport = f"""
 RAPPORT D'INTERVENTION — {intervention.numero}
 
@@ -792,13 +944,9 @@ DESCRIPTION DU PROBLÈME :
 DIAGNOSTIC ET ACTIONS RÉALISÉES :
 {intervention.notes_technicien}
 
-TECHNICIEN : {
-    intervention.technicien.nom
-    if intervention.technicien else 'Non assigné'
-}
+TECHNICIEN : {intervention.technicien.nom if intervention.technicien else 'Non assigné'}
             """
 
-        # Créer ou mettre à jour le rapport
         rapport, created = Rapport.objects.get_or_create(
             intervention=intervention,
             defaults={
@@ -833,15 +981,11 @@ class ValiderRapportView(APIView):
                 {'erreur': 'Rapport non trouvé'},
                 status=status.HTTP_404_NOT_FOUND)
 
-        # Vérifier que c'est le bon technicien
         user = request.user
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
-                tech = Technicien.objects.get(
-                    user=user)
-                if (rapport.intervention.technicien
-                        != tech):
+                tech = Technicien.objects.get(user=user)
+                if rapport.intervention.technicien != tech:
                     return Response(
                         {'erreur': 'Accès refusé'},
                         status=status.HTTP_403_FORBIDDEN)
@@ -860,27 +1004,23 @@ class ValiderRapportView(APIView):
             'valide': rapport.valide,
             'date_validation': rapport.date_validation
         }, status=status.HTTP_200_OK)
-    
+
 # ─── AJOUTER PIECE UTILISEE ───
 class AjouterPieceUtiliseeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         try:
-            intervention = Intervention.objects.get(
-                pk=pk)
+            intervention = Intervention.objects.get(pk=pk)
         except Intervention.DoesNotExist:
             return Response(
                 {'erreur': 'Intervention non trouvée'},
                 status=status.HTTP_404_NOT_FOUND)
 
-        # Vérifier que c'est le bon technicien
         user = request.user
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
-                tech = Technicien.objects.get(
-                    user=user)
+                tech = Technicien.objects.get(user=user)
                 if intervention.technicien != tech:
                     return Response(
                         {'erreur': 'Accès refusé'},
@@ -895,8 +1035,7 @@ class AjouterPieceUtiliseeView(APIView):
 
         if not piece_id or not quantite:
             return Response(
-                {'erreur': 'piece_id et quantite '
-                           'sont obligatoires'},
+                {'erreur': 'piece_id et quantite sont obligatoires'},
                 status=status.HTTP_400_BAD_REQUEST)
 
         try:
@@ -906,48 +1045,32 @@ class AjouterPieceUtiliseeView(APIView):
                 {'erreur': 'Pièce non trouvée'},
                 status=status.HTTP_404_NOT_FOUND)
 
-        # Vérifier le stock disponible
         quantite = int(quantite)
         if piece.quantite_stock < quantite:
             return Response({
                 'erreur': 'Stock insuffisant',
-                'stock_disponible':
-                    piece.quantite_stock,
+                'stock_disponible': piece.quantite_stock,
                 'quantite_demandee': quantite
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Vérifier si la pièce est déjà ajoutée
-        piece_utilisee_existante = (
-            PieceUtilisee.objects.filter(
-                intervention=intervention,
-                piece=piece
-            ).first()
-        )
+        piece_utilisee_existante = PieceUtilisee.objects.filter(
+            intervention=intervention, piece=piece).first()
 
         if piece_utilisee_existante:
-            # Calculer la différence de quantité
-            ancienne_qte = (
-                piece_utilisee_existante.quantite)
+            ancienne_qte = piece_utilisee_existante.quantite
             difference = quantite - ancienne_qte
 
-            # Vérifier le stock pour la différence
-            if difference > 0 and \
-                    piece.quantite_stock < difference:
+            if difference > 0 and piece.quantite_stock < difference:
                 return Response({
                     'erreur': 'Stock insuffisant',
-                    'stock_disponible':
-                        piece.quantite_stock,
-                    'quantite_supplementaire':
-                        difference
+                    'stock_disponible': piece.quantite_stock,
+                    'quantite_supplementaire': difference
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Mettre à jour la quantité
             piece_utilisee_existante.quantite = quantite
-            piece_utilisee_existante.prix_unitaire = (
-                piece.prix_unitaire)
+            piece_utilisee_existante.prix_unitaire = piece.prix_unitaire
             piece_utilisee_existante.save()
 
-            # Mettre à jour le stock
             piece.quantite_stock -= difference
             piece.save()
 
@@ -957,11 +1080,9 @@ class AjouterPieceUtiliseeView(APIView):
                 'quantite': quantite,
                 'stock_restant': piece.quantite_stock,
                 'prix_unitaire': str(piece.prix_unitaire),
-                'sous_total': str(
-                    quantite * piece.prix_unitaire)
+                'sous_total': str(quantite * piece.prix_unitaire)
             }, status=status.HTTP_200_OK)
 
-        # Créer la pièce utilisée
         piece_utilisee = PieceUtilisee.objects.create(
             intervention=intervention,
             piece=piece,
@@ -969,7 +1090,6 @@ class AjouterPieceUtiliseeView(APIView):
             prix_unitaire=piece.prix_unitaire
         )
 
-        # Décrémenter le stock
         piece.quantite_stock -= quantite
         piece.save()
 
@@ -980,8 +1100,7 @@ class AjouterPieceUtiliseeView(APIView):
             'quantite': quantite,
             'stock_restant': piece.quantite_stock,
             'prix_unitaire': str(piece.prix_unitaire),
-            'sous_total': str(
-                quantite * piece.prix_unitaire)
+            'sous_total': str(quantite * piece.prix_unitaire)
         }, status=status.HTTP_201_CREATED)
 
 # ─── SUPPRIMER PIECE UTILISEE ───
@@ -990,23 +1109,17 @@ class SupprimerPieceUtiliseeView(APIView):
 
     def delete(self, request, pk):
         try:
-            piece_utilisee = PieceUtilisee.objects.get(
-                pk=pk)
+            piece_utilisee = PieceUtilisee.objects.get(pk=pk)
         except PieceUtilisee.DoesNotExist:
             return Response(
-                {'erreur': 'Pièce utilisée '
-                           'non trouvée'},
+                {'erreur': 'Pièce utilisée non trouvée'},
                 status=status.HTTP_404_NOT_FOUND)
 
-        # Vérifier que c'est le bon technicien
         user = request.user
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
-                tech = Technicien.objects.get(
-                    user=user)
-                if (piece_utilisee.intervention
-                        .technicien != tech):
+                tech = Technicien.objects.get(user=user)
+                if piece_utilisee.intervention.technicien != tech:
                     return Response(
                         {'erreur': 'Accès refusé'},
                         status=status.HTTP_403_FORBIDDEN)
@@ -1015,7 +1128,6 @@ class SupprimerPieceUtiliseeView(APIView):
                     {'erreur': 'Accès refusé'},
                     status=status.HTTP_403_FORBIDDEN)
 
-        # Remettre le stock
         piece = piece_utilisee.piece
         piece.quantite_stock += piece_utilisee.quantite
         piece.save()
@@ -1033,21 +1145,16 @@ class ListePiecesUtiliseesView(APIView):
 
     def get(self, request, pk):
         try:
-            intervention = Intervention.objects.get(
-                pk=pk)
+            intervention = Intervention.objects.get(pk=pk)
         except Intervention.DoesNotExist:
             return Response(
                 {'erreur': 'Intervention non trouvée'},
                 status=status.HTTP_404_NOT_FOUND)
 
         pieces = intervention.pieces_utilisees.all()
-        serializer = PieceUtiliseeSerializer(
-            pieces, many=True)
+        serializer = PieceUtiliseeSerializer(pieces, many=True)
 
-        total = sum(
-            p.quantite * p.prix_unitaire
-            for p in pieces
-        )
+        total = sum(p.quantite * p.prix_unitaire for p in pieces)
 
         return Response({
             'intervention': intervention.numero,

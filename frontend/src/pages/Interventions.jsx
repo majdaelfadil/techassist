@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
     Table, Card, Button, Tag, Input, Select,
     Space, Modal, Form, message, Tooltip,
-    Popconfirm, DatePicker, Drawer, Descriptions,
-    Badge, Divider
+    Popconfirm, DatePicker, Drawer, Descriptions, InputNumber,
+    Badge, Divider, Alert
 } from 'antd';
 import {
     PlusOutlined, SearchOutlined, EyeOutlined,
     EditOutlined, DeleteOutlined, FilterOutlined,
-    SwapOutlined, UserAddOutlined, ReloadOutlined
+    SwapOutlined, UserAddOutlined, ReloadOutlined,
+    CheckCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -133,26 +134,59 @@ const Interventions = () => {
         }
     };
 
-    // ─── ASSIGNER TECHNICIEN ───
-    const assignerTechnicien = async (values) => {
-        try {
-            await api.patch(
-                `/interventions/${interventionSelectionnee.id}/`,
-                {
-                    technicien_id: values.technicien_id,
-                    date_planifiee: values.date_planifiee
-                        ?.toISOString()
-                }
-            );
-            message.success('Technicien assigné !');
-            setModalAssigner(false);
-            formAssigner.resetFields();
-            chargerInterventions();
-        } catch (error) {
-            message.error('Erreur assignation');
-        }
-    };
+   // ─── VÉRIFIER DISPONIBILITÉ ───
+const [disponibilite, setDisponibilite] = useState(null);
+const [checkingDispo, setCheckingDispo] = useState(false);
 
+const verifierDisponibilite = async (values) => {
+    if (!values.technicien_id || !values.date_planifiee) return;
+    setCheckingDispo(true);
+    setDisponibilite(null);
+    try {
+        const res = await api.post(
+            '/techniciens/verifier-disponibilite/',
+            {
+                technicien_id: values.technicien_id,
+                date_planifiee: values.date_planifiee.toISOString(),
+                duree_estimee: values.duree_estimee || 1,
+                intervention_id: interventionSelectionnee?.id
+            }
+        );
+        setDisponibilite(res.data);
+    } catch (error) {
+        setDisponibilite(null);
+    } finally {
+        setCheckingDispo(false);
+    }
+};
+
+// ─── ASSIGNER TECHNICIEN ───
+const assignerTechnicien = async (values) => {
+    // Vérifier disponibilité avant d'assigner
+    if (!disponibilite || !disponibilite.disponible) {
+        message.warning('Vérifiez d\'abord la disponibilité du technicien !');
+        return;
+    }
+    try {
+        // Utiliser la nouvelle route avec vérification backend
+        await api.post(`/interventions/${interventionSelectionnee.id}/assigner-technicien/`, {
+            technicien_id: values.technicien_id,
+            date_planifiee: values.date_planifiee?.toISOString(),
+            duree_estimee: values.duree_estimee
+        });
+        message.success('Technicien assigné avec succès !');
+        setModalAssigner(false);
+        setDisponibilite(null);
+        formAssigner.resetFields();
+        chargerInterventions();
+    } catch (error) {
+        if (error.response?.data?.erreur === 'Conflit de planning') {
+            message.error(error.response.data.message);
+        } else {
+            message.error('Erreur lors de l\'assignation');
+        }
+    }
+};
     // ─── OUVRIR MODAL STATUT ───
     const ouvrirModalStatut = async (intervention) => {
         setInterventionSelectionnee(intervention);
@@ -804,97 +838,209 @@ const Interventions = () => {
             </Modal>
 
             {/* ─── MODAL ASSIGNER TECHNICIEN ─── */}
-            <Modal
-                title={
-                    <span style={{ fontWeight: 700 }}>
-                        👤 Assigner un technicien
-                    </span>
+<Modal
+    title={<span style={{ fontWeight: 700 }}>👤 Assigner un technicien</span>}
+    open={modalAssigner}
+    onCancel={() => {
+        setModalAssigner(false);
+        setDisponibilite(null);
+        formAssigner.resetFields();
+    }}
+    footer={null}
+    width={480}
+>
+    <Form
+        form={formAssigner}
+        layout="vertical"
+        onFinish={assignerTechnicien}
+        style={{ marginTop: 16 }}
+        onValuesChange={(_, allValues) => {
+            // Reset disponibilité si les valeurs changent
+            setDisponibilite(null);
+        }}
+    >
+        <Form.Item
+            label="Technicien"
+            name="technicien_id"
+            rules={[{ required: true, message: 'Choisissez un technicien' }]}
+        >
+            <Select
+                placeholder="Choisir un technicien"
+                showSearch
+                filterOption={(input, option) =>
+                    option.children.toLowerCase().includes(input.toLowerCase())
                 }
-                open={modalAssigner}
-                onCancel={() => {
-                    setModalAssigner(false);
-                    formAssigner.resetFields();
-                }}
-                footer={null}
-                width={420}
             >
-                <Form
-                    form={formAssigner}
-                    layout="vertical"
-                    onFinish={assignerTechnicien}
-                    style={{ marginTop: 16 }}
-                >
-                    <Form.Item
-                        label="Technicien"
-                        name="technicien_id"
-                        rules={[{
-                            required: true,
-                            message: 'Choisissez un technicien'
-                        }]}
-                    >
-                        <Select
-                            placeholder="Choisir un technicien"
-                            showSearch
-                            filterOption={(input, option) =>
-                                option.children
-                                    .toLowerCase()
-                                    .includes(
-                                        input.toLowerCase())
+                {techniciens.map(t => (
+                    <Option key={t.id} value={t.id}>
+                        {t.nom} — {t.specialite}{t.disponible ? ' ✅' : ' ❌'}
+                    </Option>
+                ))}
+            </Select>
+        </Form.Item>
+
+        <Form.Item
+            label="Date planifiée"
+            name="date_planifiee"
+            rules={[{ required: true, message: 'Date obligatoire' }]}
+        >
+            <DatePicker
+                showTime
+                style={{ width: '100%', borderRadius: 8 }}
+                placeholder="Choisir date et heure"
+                format="DD/MM/YYYY HH:mm"
+                disabledDate={(current) => {
+                    // Désactiver les dimanches
+                    return current && current.day() === 0;
+                }}
+                disabledTime={(date) => {
+                    if (!date) return {};
+                    const isSamedi = date.day() === 6;
+                    return {
+                        disabledHours: () => {
+                            const heures = [];
+                            // Avant 8h
+                            for (let i = 0; i < 8; i++) heures.push(i);
+                            // Entre 13h et 15h (sauf samedi)
+                            if (!isSamedi) {
+                                heures.push(13, 14);
+                            } else {
+                                // Samedi : bloquer après 13h
+                                for (let i = 13; i < 24; i++) heures.push(i);
                             }
-                        >
-                            {techniciens.map(t => (
-                                <Option key={t.id}
-                                        value={t.id}>
-                                    {t.nom} — {t.specialite}
-                                    {t.disponible ?
-                                        ' ✅' : ' ❌'}
-                                </Option>
-                            ))}
-                        </Select>
-                    </Form.Item>
+                            // Après 19h
+                            if (!isSamedi) {
+                                for (let i = 19; i < 24; i++) heures.push(i);
+                            }
+                            return heures;
+                        }
+                    };
+                }}
+            />
+        </Form.Item>
 
-                    <Form.Item
-                        label="Date planifiée"
-                        name="date_planifiee"
-                    >
-                        <DatePicker
-                            showTime
-                            style={{
-                                width: '100%',
-                                borderRadius: 8
-                            }}
-                            placeholder="Choisir date et heure"
-                            format="DD/MM/YYYY HH:mm"
-                        />
-                    </Form.Item>
+        <Form.Item
+            label="Durée estimée (heures)"
+            name="duree_estimee"
+            initialValue={1}
+            rules={[{ required: true, message: 'Durée obligatoire' }]}
+        >
+            <InputNumber
+                min={0.5}
+                max={8}
+                step={0.5}
+                style={{ width: '100%', borderRadius: 8 }}
+                addonAfter="h"
+            />
+        </Form.Item>
 
-                    <div style={{
-                        display: 'flex',
-                        justifyContent: 'flex-end',
-                        gap: 12
-                    }}>
-                        <Button
-                            onClick={() => {
-                                setModalAssigner(false);
-                                formAssigner.resetFields();
-                            }}
-                        >
-                            Annuler
-                        </Button>
-                        <Button
-                            type="primary"
-                            htmlType="submit"
-                            style={{
-                                background: '#1890ff',
-                                borderColor: '#1890ff',
-                                borderRadius: 8
-                            }}
-                        >
-                            Assigner
-                        </Button>
-                    </div>
-                </Form>
-            </Modal>
+        {/* ─── BOUTON VÉRIFIER DISPONIBILITÉ ─── */}
+        <Form.Item>
+            <Button
+                type="default"
+                icon={<CheckCircleOutlined />}
+                loading={checkingDispo}
+                onClick={() => verifierDisponibilite(
+                    formAssigner.getFieldsValue()
+                )}
+                style={{
+                    width: '100%',
+                    borderRadius: 8,
+                    borderColor: '#1890ff',
+                    color: '#1890ff',
+                    fontWeight: 600
+                }}
+            >
+                Vérifier la disponibilité
+            </Button>
+        </Form.Item>
+
+        {/* ─── RÉSULTAT DISPONIBILITÉ ─── */}
+        {disponibilite && (
+            <div style={{ marginBottom: 16 }}>
+                {disponibilite.disponible ? (
+                    <Alert
+                        type="success"
+                        showIcon
+                        message="Technicien disponible ✅"
+                        description={
+                            <div>
+                                <div>{disponibilite.message}</div>
+                                <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>
+                                    Début : {disponibilite.date_debut} —
+                                    Fin : {disponibilite.date_fin}
+                                </div>
+                            </div>
+                        }
+                        style={{ borderRadius: 8 }}
+                    />
+                ) : (
+                    <Alert
+                        type="error"
+                        showIcon
+                        message="Technicien non disponible ❌"
+                        description={
+                            <div>
+                                <div>{disponibilite.message}</div>
+                                {disponibilite.suggestion && (
+                                    <div style={{
+                                        marginTop: 4,
+                                        fontSize: 12,
+                                        color: '#666'
+                                    }}>
+                                        💡 {disponibilite.suggestion}
+                                    </div>
+                                )}
+                                {disponibilite.conflits?.length > 0 && (
+                                    <div style={{ marginTop: 8 }}>
+                                        {disponibilite.conflits.map((c, i) => (
+                                            <div key={i} style={{
+                                                background: '#fff2f0',
+                                                padding: '4px 8px',
+                                                borderRadius: 4,
+                                                marginTop: 4,
+                                                fontSize: 12
+                                            }}>
+                                                🔴 {c.numero} — {c.client} :
+                                                {c.debut} → {c.fin}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        }
+                        style={{ borderRadius: 8 }}
+                    />
+                )}
+            </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+            <Button onClick={() => {
+                setModalAssigner(false);
+                setDisponibilite(null);
+                formAssigner.resetFields();
+            }}>
+                Annuler
+            </Button>
+            <Button
+                type="primary"
+                htmlType="submit"
+                disabled={!disponibilite?.disponible}
+                style={{
+                    background: disponibilite?.disponible
+                        ? '#1890ff' : '#d9d9d9',
+                    borderColor: disponibilite?.disponible
+                        ? '#1890ff' : '#d9d9d9',
+                    borderRadius: 8,
+                    fontWeight: 600
+                }}
+            >
+                Assigner
+            </Button>
+        </div>
+    </Form>
+</Modal>
 
             {/* ─── DRAWER DÉTAIL ─── */}
             <Drawer
