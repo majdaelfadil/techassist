@@ -3,18 +3,17 @@ import { Row, Col, Card, Statistic, Table, Tag, Spin } from 'antd';
 import {
     ToolOutlined, CheckCircleOutlined,
     ClockCircleOutlined, WarningOutlined,
-    RiseOutlined, TeamOutlined
 } from '@ant-design/icons';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid,
          Tooltip, ResponsiveContainer, PieChart,
          Pie, Cell, Legend } from 'recharts';
 import api from '../services/api';
+import authService from '../services/authService';
+import DashboardTechnicien from './DashboardTechnicien';
 
-
-
-const COLORS = ['#FF8C00', '#1A1A1A', '#4CAF50',
-                '#2196F3', '#9C27B0', '#F44336',
-                '#00BCD4', '#FFB347', '#666'];
+const COLORS = ['#FF8C00', '#1A1A1A', '#52c41a',
+                '#1890ff', '#722ed1', '#f5222d',
+                '#13c2c2', '#fa8c16', '#666'];
 
 const StatCard = ({ title, value, icon, color, bg }) => (
     <Card
@@ -24,7 +23,8 @@ const StatCard = ({ title, value, icon, color, bg }) => (
             boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
             background: '#fff',
             overflow: 'hidden',
-            position: 'relative'
+            position: 'relative',
+            cursor: 'default'
         }}
     >
         <div style={{
@@ -62,7 +62,8 @@ const StatCard = ({ title, value, icon, color, bg }) => (
     </Card>
 );
 
-const Dashboard = () => {
+// ─── DASHBOARD RESPONSABLE / AGENT ───
+const DashboardAdmin = () => {
     const [stats, setStats] = useState(null);
     const [interventions, setInterventions] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -79,8 +80,7 @@ const Dashboard = () => {
                     api.get('/interventions/')
                 ]);
             setStats(statsRes.data);
-            setInterventions(
-                interventionsRes.data.slice(0, 6));
+            setInterventions(interventionsRes.data.slice(0, 6));
         } catch (error) {
             console.error(error);
         } finally {
@@ -88,7 +88,17 @@ const Dashboard = () => {
         }
     };
 
-
+    const couleurStatut = {
+        'nouveau':        '#1890ff',
+        'diagnostique':   '#13c2c2',
+        'assigne':        '#722ed1',
+        'en_cours':       '#fa8c16',
+        'attente_pieces': '#faad14',
+        'termine':        '#52c41a',
+        'valide':         '#a0d911',
+        'facture':        '#eb2f96',
+        'cloture':        '#8c8c8c',
+    };
 
     const colonnes = [
         {
@@ -141,30 +151,14 @@ const Dashboard = () => {
         {
             title: 'Statut',
             dataIndex: 'statut',
-            render: (statut) => {
-                const config = {
-                    'nouveau':        '#1890ff',
-                    'diagnostique':   '#13c2c2',
-                    'assigne':        '#722ed1',
-                    'en_cours':       '#fa8c16',
-                    'attente_pieces': '#faad14',
-                    'termine':        '#52c41a',
-                    'valide':         '#a0d911',
-                    'facture':        '#eb2f96',
-                    'cloture':        '#8c8c8c',
-                };
-                return (
-                    <Tag
-                        color={config[statut]}
-                        style={{
-                            borderRadius: 6,
-                            fontWeight: 500
-                        }}
-                    >
-                        {statut?.toUpperCase()}
-                    </Tag>
-                );
-            }
+            render: (statut) => (
+                <Tag
+                    color={couleurStatut[statut]}
+                    style={{ borderRadius: 6, fontWeight: 500 }}
+                >
+                    {statut?.toUpperCase()}
+                </Tag>
+            )
         },
     ];
 
@@ -181,8 +175,6 @@ const Dashboard = () => {
 
     return (
         <div style={{ padding: 28 }}>
-
-            {/* ─── TITRE ─── */}
             <div style={{ marginBottom: 28 }}>
                 <h1 style={{
                     fontSize: 24,
@@ -206,8 +198,7 @@ const Dashboard = () => {
                 <Col xs={24} sm={12} xl={6}>
                     <StatCard
                         title="Aujourd'hui"
-                        value={stats?.stats
-                            ?.interventions_aujourd_hui || 0}
+                        value={stats?.stats?.interventions_aujourd_hui || 0}
                         icon={<ToolOutlined />}
                         color="#FF8C00"
                         bg="rgba(255,140,0,0.08)"
@@ -216,8 +207,7 @@ const Dashboard = () => {
                 <Col xs={24} sm={12} xl={6}>
                     <StatCard
                         title="En cours"
-                        value={stats?.stats
-                            ?.interventions_en_cours || 0}
+                        value={stats?.stats?.interventions_en_cours || 0}
                         icon={<ClockCircleOutlined />}
                         color="#1890ff"
                         bg="rgba(24,144,255,0.08)"
@@ -226,8 +216,7 @@ const Dashboard = () => {
                 <Col xs={24} sm={12} xl={6}>
                     <StatCard
                         title="Terminées"
-                        value={stats?.stats
-                            ?.interventions_terminees || 0}
+                        value={stats?.stats?.interventions_terminees || 0}
                         icon={<CheckCircleOutlined />}
                         color="#52c41a"
                         bg="rgba(82,196,26,0.08)"
@@ -236,8 +225,7 @@ const Dashboard = () => {
                 <Col xs={24} sm={12} xl={6}>
                     <StatCard
                         title="En retard"
-                        value={stats?.stats
-                            ?.interventions_en_retard || 0}
+                        value={stats?.stats?.interventions_en_retard || 0}
                         icon={<WarningOutlined />}
                         color="#f5222d"
                         bg="rgba(245,34,45,0.08)"
@@ -257,28 +245,17 @@ const Dashboard = () => {
                         bordered={false}
                         style={{
                             borderRadius: 16,
-                            boxShadow:
-                                '0 2px 12px rgba(0,0,0,0.06)'
+                            boxShadow: '0 2px 12px rgba(0,0,0,0.06)'
                         }}
                     >
-                        <ResponsiveContainer
-                            width="100%" height={240}>
+                        <ResponsiveContainer width="100%" height={240}>
                             <BarChart
                                 data={stats?.par_statut || []}
-                                margin={{ top: 5, right: 10,
-                                          left: -20, bottom: 5 }}
+                                margin={{ top: 5, right: 10, left: -20, bottom: 5 }}
                             >
-                                <CartesianGrid
-                                    strokeDasharray="3 3"
-                                    stroke="#f0f0f0"
-                                />
-                                <XAxis
-                                    dataKey="statut"
-                                    tick={{ fontSize: 11 }}
-                                />
-                                <YAxis
-                                    tick={{ fontSize: 11 }}
-                                />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                <XAxis dataKey="statut" tick={{ fontSize: 11 }} />
+                                <YAxis tick={{ fontSize: 11 }} />
                                 <Tooltip />
                                 <Bar
                                     dataKey="count"
@@ -301,12 +278,10 @@ const Dashboard = () => {
                         bordered={false}
                         style={{
                             borderRadius: 16,
-                            boxShadow:
-                                '0 2px 12px rgba(0,0,0,0.06)'
+                            boxShadow: '0 2px 12px rgba(0,0,0,0.06)'
                         }}
                     >
-                        <ResponsiveContainer
-                            width="100%" height={240}>
+                        <ResponsiveContainer width="100%" height={240}>
                             <PieChart>
                                 <Pie
                                     data={stats?.par_type || []}
@@ -318,14 +293,10 @@ const Dashboard = () => {
                                     outerRadius={85}
                                     paddingAngle={3}
                                 >
-                                    {(stats?.par_type || [])
-                                        .map((_, index) => (
+                                    {(stats?.par_type || []).map((_, index) => (
                                         <Cell
                                             key={index}
-                                            fill={COLORS[
-                                                index %
-                                                COLORS.length
-                                            ]}
+                                            fill={COLORS[index % COLORS.length]}
                                         />
                                     ))}
                                 </Pie>
@@ -334,10 +305,7 @@ const Dashboard = () => {
                                     iconType="circle"
                                     iconSize={8}
                                     formatter={(value) => (
-                                        <span style={{
-                                            fontSize: 11,
-                                            color: '#666'
-                                        }}>
+                                        <span style={{ fontSize: 11, color: '#666' }}>
                                             {value}
                                         </span>
                                     )}
@@ -367,11 +335,22 @@ const Dashboard = () => {
                     rowKey="id"
                     pagination={false}
                     style={{ borderRadius: 8 }}
-                    rowClassName={() => 'table-row'}
                 />
             </Card>
         </div>
     );
+};
+
+// ─── DASHBOARD PRINCIPAL ───
+// Affiche le bon dashboard selon le rôle
+const Dashboard = () => {
+    const role = authService.getRole();
+
+    if (role === 'technicien') {
+        return <DashboardTechnicien />;
+    }
+
+    return <DashboardAdmin />;
 };
 
 export default Dashboard;
