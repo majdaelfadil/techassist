@@ -348,7 +348,7 @@ class InterventionTransitionsView(APIView):
             'transitions_possibles': transitions
         })
 
-# ─── VALIDER INTERVENTION ───
+# ─── VALIDER INTERVENTION (version simple existante) ───
 class InterventionValiderView(APIView):
     permission_classes = [EstAgentOuResponsable]
 
@@ -400,6 +400,71 @@ class InterventionValiderView(APIView):
                 'statut': facture.statut
             }
         }, status=status.HTTP_200_OK)
+
+
+# ─── NOUVELLE VUE : VALIDER INTERVENTION ET GÉNÉRER FACTURE ───
+class InterventionValiderGenererFactureView(APIView):
+    permission_classes = [EstAgentOuResponsable]
+
+    def post(self, request, pk):
+        try:
+            intervention = Intervention.objects.get(pk=pk)
+        except Intervention.DoesNotExist:
+            return Response(
+                {'erreur': 'Intervention non trouvée'},
+                status=status.HTTP_404_NOT_FOUND)
+
+        if intervention.statut != 'termine':
+            return Response({
+                'erreur': 'Intervention doit être terminée',
+                'statut_actuel': intervention.statut
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Vérifier si une facture existe déjà
+        facture_existante = Facture.objects.filter(intervention=intervention).first()
+        
+        montant_pieces = sum(
+            p.quantite * p.prix_unitaire
+            for p in intervention.pieces_utilisees.all()
+        )
+
+        duree = (intervention.duree_reelle or intervention.duree_estimee or 1)
+        technicien = intervention.technicien
+        tarif = (technicien.tarif_horaire if technicien else 150)
+        montant_main_oeuvre = (float(duree) * float(tarif))
+
+        if facture_existante:
+            # Mettre à jour la facture existante
+            facture_existante.montant_main_oeuvre = montant_main_oeuvre
+            facture_existante.montant_pieces = montant_pieces
+            facture_existante.save()
+            facture = facture_existante
+        else:
+            # Créer une nouvelle facture
+            facture = Facture.objects.create(
+                intervention=intervention,
+                montant_main_oeuvre=montant_main_oeuvre,
+                montant_pieces=montant_pieces,
+                montant_deplacement=0,
+                tva=20,
+                statut='brouillon'
+            )
+
+        intervention.statut = 'valide'
+        intervention.save()
+
+        return Response({
+            'message': 'Intervention validée et facture générée',
+            'intervention_statut': intervention.statut,
+            'facture': {
+                'id': facture.id,
+                'numero': facture.numero,
+                'total_ht': float(facture.total_ht),
+                'total_ttc': float(facture.total_ttc),
+                'statut': facture.statut
+            }
+        }, status=status.HTTP_200_OK)
+
 
 # ════════════════════════════════
 # ─── RAPPORTS ───

@@ -40,6 +40,11 @@ urlpatterns = [
     path('interventions/<int:pk>/valider/',
          views.InterventionValiderView.as_view()),
 
+    # ⭐ NOUVELLE ROUTE : Valider et générer la facture ⭐
+    path('interventions/<int:pk>/valider-generer-facture/',
+         views.InterventionValiderGenererFactureView.as_view(),
+         name='intervention-valider-generer-facture'),
+
     path('interventions/<int:pk>/envoyer-email-technicien/',
          views.EnvoyerEmailTechnicienView.as_view()),
 
