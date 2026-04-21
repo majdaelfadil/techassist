@@ -6,6 +6,7 @@ from rest_framework.permissions import (
 from django.db.models import Count, F
 from django.utils import timezone
 from django.http import HttpResponse
+from django.db import transaction, IntegrityError
 from .models import (Client, Technicien, Agent,
                      ProfilUtilisateur, Appareil,
                      Piece, Intervention, PieceUtilisee,
@@ -275,6 +276,10 @@ class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
         return super().update(request, *args, **kwargs)
 
 # ─── CHANGER STATUT ───
+
+# Statuts que le technicien est autorisé à définir
+STATUTS_AUTORISES_TECHNICIEN = {'en_cours', 'attente_pieces', 'termine'}
+
 class InterventionChangerStatutView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -287,12 +292,18 @@ class InterventionChangerStatutView(APIView):
                 status=status.HTTP_404_NOT_FOUND)
 
         user = request.user
-        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
+        est_technicien = (
+            hasattr(user, 'profil') and
+            user.profil.role == 'technicien'
+        )
+
+        # ── Vérification : technicien = uniquement ses propres interventions ──
+        if est_technicien:
             try:
                 tech = Technicien.objects.get(user=user)
                 if intervention.technicien != tech:
                     return Response(
-                        {'erreur': 'Accès refusé'},
+                        {'erreur': 'Accès refusé : cette intervention ne vous est pas assignée'},
                         status=status.HTTP_403_FORBIDDEN)
             except Technicien.DoesNotExist:
                 return Response(
@@ -306,8 +317,21 @@ class InterventionChangerStatutView(APIView):
                 {'erreur': 'Statut manquant'},
                 status=status.HTTP_400_BAD_REQUEST)
 
+        # ── Vérification : technicien ne peut mettre que en_cours / attente_pieces / termine ──
+        if est_technicien and nouveau_statut not in STATUTS_AUTORISES_TECHNICIEN:
+            return Response({
+                'erreur': 'Action non autorisée',
+                'message': f'En tant que technicien, vous pouvez uniquement passer au statut : {", ".join(sorted(STATUTS_AUTORISES_TECHNICIEN))}',
+                'statuts_autorises': sorted(STATUTS_AUTORISES_TECHNICIEN),
+                'statut_demande': nouveau_statut,
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # ── Vérification de la transition dans le workflow général ──
         if not transition_autorisee(intervention.statut, nouveau_statut):
             transitions = get_transitions_possibles(intervention.statut)
+            # Si technicien, on filtre les transitions affichées à celles qu'il peut faire
+            if est_technicien:
+                transitions = [t for t in transitions if t in STATUTS_AUTORISES_TECHNICIEN]
             return Response({
                 'erreur': 'Transition non autorisée',
                 'statut_actuel': intervention.statut,
@@ -322,11 +346,16 @@ class InterventionChangerStatutView(APIView):
 
         intervention.save()
 
+        # Transitions affichées en retour : filtrées selon le rôle
+        transitions_retour = get_transitions_possibles(nouveau_statut)
+        if est_technicien:
+            transitions_retour = [t for t in transitions_retour if t in STATUTS_AUTORISES_TECHNICIEN]
+
         return Response({
             'message': 'Statut changé avec succès',
             'ancien_statut': ancien_statut,
             'nouveau_statut': nouveau_statut,
-            'transitions_possibles': get_transitions_possibles(nouveau_statut)
+            'transitions_possibles': transitions_retour
         }, status=status.HTTP_200_OK)
 
 # ─── TRANSITIONS POSSIBLES ───
@@ -343,9 +372,19 @@ class InterventionTransitionsView(APIView):
 
         transitions = get_transitions_possibles(intervention.statut)
 
+        # Le technicien ne voit que les transitions qu'il est autorisé à faire
+        user = request.user
+        est_technicien = (
+            hasattr(user, 'profil') and
+            user.profil.role == 'technicien'
+        )
+        if est_technicien:
+            transitions = [t for t in transitions if t in STATUTS_AUTORISES_TECHNICIEN]
+
         return Response({
             'statut_actuel': intervention.statut,
-            'transitions_possibles': transitions
+            'transitions_possibles': transitions,
+            'role': user.profil.role if hasattr(user, 'profil') else 'responsable'
         })
 
 # ─── VALIDER INTERVENTION (version simple existante) ───
@@ -366,15 +405,16 @@ class InterventionValiderView(APIView):
                 'statut_actuel': intervention.statut
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        from decimal import Decimal
         montant_pieces = sum(
-            p.quantite * p.prix_unitaire
+            Decimal(str(p.quantite)) * p.prix_unitaire
             for p in intervention.pieces_utilisees.all()
         )
 
-        duree = (intervention.duree_reelle or intervention.duree_estimee or 1)
+        duree = Decimal(str(intervention.duree_reelle or intervention.duree_estimee or 1))
         technicien = intervention.technicien
-        tarif = (technicien.tarif_horaire if technicien else 150)
-        montant_main_oeuvre = (float(duree) * float(tarif))
+        tarif = Decimal(str(technicien.tarif_horaire if technicien else 150))
+        montant_main_oeuvre = duree * tarif
 
         facture, created = Facture.objects.get_or_create(
             intervention=intervention,
@@ -402,7 +442,39 @@ class InterventionValiderView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ─── NOUVELLE VUE : VALIDER INTERVENTION ET GÉNÉRER FACTURE ───
+# ════════════════════════════════════════════════════════════
+# ─── VALIDER INTERVENTION ET GÉNÉRER FACTURE (CORRIGÉ) ───
+# ════════════════════════════════════════════════════════════
+def _generer_numero_facture_unique():
+    """
+    Génère un numéro de facture unique de manière atomique.
+    Évite les doublons dus à une séquence désynchronisée en base.
+    """
+    from datetime import datetime
+    annee = datetime.now().year
+    prefix = f"FAC/{annee}/"
+
+    with transaction.atomic():
+        # Verrouille les lignes pour éviter les race conditions
+        derniere = (
+            Facture.objects
+            .filter(numero__startswith=prefix)
+            .order_by('-numero')
+            .select_for_update()
+            .first()
+        )
+        if derniere:
+            try:
+                dernier_num = int(derniere.numero.split('/')[-1])
+            except (ValueError, IndexError):
+                dernier_num = 0
+            nouveau_num = dernier_num + 1
+        else:
+            nouveau_num = 1
+
+        return f"{prefix}{nouveau_num:04d}"
+
+
 class InterventionValiderGenererFactureView(APIView):
     permission_classes = [EstAgentOuResponsable]
 
@@ -420,38 +492,70 @@ class InterventionValiderGenererFactureView(APIView):
                 'statut_actuel': intervention.statut
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Vérifier si une facture existe déjà
-        facture_existante = Facture.objects.filter(intervention=intervention).first()
-        
+        from decimal import Decimal
         montant_pieces = sum(
-            p.quantite * p.prix_unitaire
+            Decimal(str(p.quantite)) * p.prix_unitaire
             for p in intervention.pieces_utilisees.all()
         )
 
-        duree = (intervention.duree_reelle or intervention.duree_estimee or 1)
+        duree = Decimal(str(intervention.duree_reelle or intervention.duree_estimee or 1))
         technicien = intervention.technicien
-        tarif = (technicien.tarif_horaire if technicien else 150)
-        montant_main_oeuvre = (float(duree) * float(tarif))
+        tarif = Decimal(str(technicien.tarif_horaire if technicien else 150))
+        montant_main_oeuvre = duree * tarif
 
-        if facture_existante:
-            # Mettre à jour la facture existante
-            facture_existante.montant_main_oeuvre = montant_main_oeuvre
-            facture_existante.montant_pieces = montant_pieces
-            facture_existante.save()
-            facture = facture_existante
-        else:
-            # Créer une nouvelle facture
-            facture = Facture.objects.create(
-                intervention=intervention,
-                montant_main_oeuvre=montant_main_oeuvre,
-                montant_pieces=montant_pieces,
-                montant_deplacement=0,
-                tva=20,
-                statut='brouillon'
-            )
+        try:
+            with transaction.atomic():
+                # Si une facture existe déjà pour cette intervention, on la met à jour
+                facture_existante = (
+                    Facture.objects
+                    .select_for_update()
+                    .filter(intervention=intervention)
+                    .first()
+                )
 
-        intervention.statut = 'valide'
-        intervention.save()
+                if facture_existante:
+                    facture_existante.montant_main_oeuvre = montant_main_oeuvre
+                    facture_existante.montant_pieces = montant_pieces
+                    facture_existante.save()
+                    facture = facture_existante
+                else:
+                    # Générer un numéro unique à l'intérieur d'une transaction atomique
+                    numero = _generer_numero_facture_unique()
+                    facture = Facture.objects.create(
+                        intervention=intervention,
+                        numero=numero,
+                        montant_main_oeuvre=montant_main_oeuvre,
+                        montant_pieces=montant_pieces,
+                        montant_deplacement=0,
+                        tva=20,
+                        statut='brouillon'
+                    )
+
+                intervention.statut = 'valide'
+                intervention.save()
+
+        except IntegrityError:
+            # Dernier recours : en cas de collision extrêmement rare,
+            # on réessaie une fois avec un nouveau numéro
+            try:
+                with transaction.atomic():
+                    numero = _generer_numero_facture_unique()
+                    facture = Facture.objects.create(
+                        intervention=intervention,
+                        numero=numero,
+                        montant_main_oeuvre=montant_main_oeuvre,
+                        montant_pieces=montant_pieces,
+                        montant_deplacement=0,
+                        tva=20,
+                        statut='brouillon'
+                    )
+                    intervention.statut = 'valide'
+                    intervention.save()
+            except IntegrityError as e:
+                return Response(
+                    {'erreur': f'Impossible de générer un numéro de facture unique : {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
         return Response({
             'message': 'Intervention validée et facture générée',

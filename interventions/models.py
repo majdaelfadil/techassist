@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
 
 # ─── CLIENT ───
@@ -211,9 +211,24 @@ class Intervention(models.Model):
         if not self.numero:
             from django.utils import timezone
             year = timezone.now().year
-            count = Intervention.objects.filter(
-                date_creation__year=year).count() + 1
-            self.numero = f"INT/{year}/{count:04d}"
+            # Utilise select_for_update pour éviter les doublons
+            with transaction.atomic():
+                derniere = (
+                    Intervention.objects
+                    .filter(numero__startswith=f"INT/{year}/")
+                    .order_by('-numero')
+                    .select_for_update()
+                    .first()
+                )
+                if derniere:
+                    try:
+                        dernier_num = int(derniere.numero.split('/')[-1])
+                    except (ValueError, IndexError):
+                        dernier_num = 0
+                    nouveau_num = dernier_num + 1
+                else:
+                    nouveau_num = 1
+                self.numero = f"INT/{year}/{nouveau_num:04d}"
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -321,18 +336,42 @@ class Facture(models.Model):
         blank=True, null=True)
 
     def save(self, *args, **kwargs):
+        # ── Génération du numéro unique et atomique ──
+        # On ne génère un numéro QUE si le champ est vide.
+        # Si views.py en passe déjà un (via _generer_numero_facture_unique),
+        # on le respecte sans le recalculer — ce qui évite le doublon.
         if not self.numero:
             from django.utils import timezone
             year = timezone.now().year
-            count = Facture.objects.filter(
-                date_emission__year=year).count() + 1
-            self.numero = f"FAC/{year}/{count:04d}"
+            with transaction.atomic():
+                derniere = (
+                    Facture.objects
+                    .filter(numero__startswith=f"FAC/{year}/")
+                    .order_by('-numero')
+                    .select_for_update()
+                    .first()
+                )
+                if derniere:
+                    try:
+                        dernier_num = int(derniere.numero.split('/')[-1])
+                    except (ValueError, IndexError):
+                        dernier_num = 0
+                    nouveau_num = dernier_num + 1
+                else:
+                    nouveau_num = 1
+                self.numero = f"FAC/{year}/{nouveau_num:04d}"
+
+        # ── Calcul des totaux (toujours recalculé) ──
+        # On convertit tout en Decimal pour éviter le TypeError float + Decimal
+        from decimal import Decimal
         self.total_ht = (
-            self.montant_main_oeuvre +
-            self.montant_pieces +
-            self.montant_deplacement)
+            Decimal(str(self.montant_main_oeuvre)) +
+            Decimal(str(self.montant_pieces)) +
+            Decimal(str(self.montant_deplacement))
+        )
         self.total_ttc = (
-            self.total_ht * (1 + self.tva / 100))
+            self.total_ht * (1 + Decimal(str(self.tva)) / Decimal('100'))
+        )
         super().save(*args, **kwargs)
 
     def __str__(self):
