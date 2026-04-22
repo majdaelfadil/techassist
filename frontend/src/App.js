@@ -19,7 +19,7 @@ const ProtectedRoute = ({ children, roles }) => {
         return <Navigate to="/login" />;
     }
     if (roles && !roles.includes(
-            authService.getRole())) {
+        authService.getRole())) {
         return <Navigate to="/dashboard" />;
     }
     return <AppLayout>{children}</AppLayout>;
@@ -59,7 +59,7 @@ function App() {
                     path="/planning"
                     element={
                         <ProtectedRoute
-                            roles={['technicien']}>
+                            roles={['technicien','responsable']}>
                             <Planning />
                         </ProtectedRoute>
                     }
@@ -78,25 +78,21 @@ function App() {
                     element={
                         <ProtectedRoute
                             roles={['responsable',
-                                    'technicien']}>
+                                'technicien','agent']}>
                             <Pieces />
                         </ProtectedRoute>
                     }
                 />
-                <Route
-                    path="/factures"
-                    element={
-                        <ProtectedRoute
-                            roles={['responsable']}>
-                            <Factures />
-                        </ProtectedRoute>
-                    }
-                />
+                <Route path="/factures" element={
+                    <ProtectedRoute roles={['agent']}>
+                        <Factures />
+                    </ProtectedRoute>
+                } />
                 <Route
                     path="/clients"
                     element={
                         <ProtectedRoute
-                            roles={['agent', 'responsable']}>
+                            roles={['agent']}>
                             <Clients />
                         </ProtectedRoute>
                     }

@@ -7,7 +7,7 @@ import {
     AppstoreOutlined, FileTextOutlined,
     LogoutOutlined, BellOutlined,
     MenuFoldOutlined, MenuUnfoldOutlined,
-    CalendarOutlined
+    CalendarOutlined, CustomerServiceOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation }
     from 'react-router-dom';
@@ -22,56 +22,51 @@ const AppLayout = ({ children }) => {
     const role = authService.getRole();
     const nom = authService.getNom();
 
-    const tousMenuItems = [
-        {
-            key: '/dashboard',
-            icon: <DashboardOutlined />,
-            label: 'Dashboard',
-            roles: ['responsable', 'agent',
-                    'technicien']
-        },
-        {
-            key: '/interventions',
-            icon: <ToolOutlined />,
-            label: 'Interventions',
-            roles: ['responsable', 'agent',
-                    'technicien']
-        },
-        {
-            key: '/planning',
-            icon: <CalendarOutlined />,
-            label: 'Mon Planning',
-            roles: ['technicien']
-        },
-        {
-            key: '/clients',
-            icon: <UserOutlined />,
-            label: 'Clients',
-            roles: ['responsable', 'agent']
-        },
-        {
-            key: '/techniciens',
-            icon: <TeamOutlined />,
-            label: 'Techniciens',
-            roles: ['responsable']
-        },
-        {
-            key: '/pieces',
-            icon: <AppstoreOutlined />,
-            label: 'Pièces',
-            roles: ['responsable', 'technicien']
-        },
-        {
-            key: '/factures',
-            icon: <FileTextOutlined />,
-            label: 'Factures',
-            roles: ['responsable']
-        },
-    ];
+    // Configuration des menus par rôle
+    const getMenuItems = () => {
+        // Menu de base commun à tous
+        const baseItems = [
+            {
+                key: '/dashboard',
+                icon: <DashboardOutlined />,
+                label: 'Dashboard',
+            },
+        ];
+        
+        // Ajouter les items spécifiques selon le rôle
+        if (role === 'agent') {
+            baseItems.push(
+                { key: '/clients', icon: <CustomerServiceOutlined />, label: 'Clients' },
+                { key: '/appareils', icon: <AppstoreOutlined />, label: 'Appareils' },
+                { key: '/interventions', icon: <ToolOutlined />, label: 'Interventions' },
+                { key: '/pieces', icon: <AppstoreOutlined />, label: 'Stock Pièces' },
+                { key: '/factures', icon: <FileTextOutlined />, label: 'Factures' }
+            );
+        } else if (role === 'responsable') {
+            // ✅ Responsable : Dashboard, Interventions, Techniciens, Rapports, Stock Pièces
+            baseItems.push(
+                { key: '/interventions', icon: <ToolOutlined />, label: 'Interventions' },
+                { key: '/pieces', icon: <AppstoreOutlined />, label: 'Stock Pièces' },
+                { key: '/techniciens', icon: <TeamOutlined />, label: 'Techniciens' },
+                { key: '/rapports', icon: <FileTextOutlined />, label: 'Rapports' }
+                // ❌ Pas de Clients
+                // ❌ Pas d'Agents
+                // ❌ Pas de Factures
+                // ❌ Pas de Planning
+            );
+        } else if (role === 'technicien') {
+            baseItems.push(
+                { key: '/interventions', icon: <ToolOutlined />, label: 'Mes Interventions' },
+                { key: '/planning', icon: <CalendarOutlined />, label: 'Mon Planning' },
+                { key: '/pieces', icon: <AppstoreOutlined />, label: 'Pièces' },
+                { key: '/rapports', icon: <FileTextOutlined />, label: 'Mes Rapports' }
+            );
+        }
+        
+        return baseItems;
+    };
 
-    const menuItems = tousMenuItems
-        .filter(item => item.roles.includes(role))
-        .map(({ roles, ...item }) => item);
+    const menuItems = getMenuItems();
 
     const couleurRole = {
         'responsable': '#FF8C00',
@@ -84,7 +79,10 @@ const AppLayout = ({ children }) => {
             key: 'logout',
             icon: <LogoutOutlined />,
             label: 'Déconnexion',
-            onClick: () => authService.logout(),
+            onClick: () => {
+                authService.logout();
+                navigate('/login');
+            },
             danger: true
         }]
     };
@@ -98,8 +96,7 @@ const AppLayout = ({ children }) => {
                 width={220}
                 style={{
                     background: '#1A1A1A',
-                    boxShadow:
-                        '2px 0 8px rgba(0,0,0,0.15)'
+                    boxShadow: '2px 0 8px rgba(0,0,0,0.15)'
                 }}
             >
                 {/* LOGO */}
@@ -107,8 +104,7 @@ const AppLayout = ({ children }) => {
                     height: 64,
                     display: 'flex',
                     alignItems: 'center',
-                    padding: collapsed ?
-                        '0 16px' : '0 20px',
+                    padding: collapsed ? '0 16px' : '0 20px',
                     borderBottom: '1px solid #2a2a2a',
                     gap: 12
                 }}>
@@ -158,10 +154,10 @@ const AppLayout = ({ children }) => {
                             fontSize: 11,
                             fontWeight: 600,
                             color: couleurRole[role],
-                            background:
-                                `${couleurRole[role]}22`
+                            background: `${couleurRole[role]}22`
                         }}>
-                            {role?.toUpperCase()}
+                            {role === 'responsable' ? 'RESPONSABLE' : 
+                             role === 'agent' ? 'AGENT' : 'TECHNICIEN'}
                         </span>
                     </div>
                 )}
@@ -189,13 +185,11 @@ const AppLayout = ({ children }) => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    boxShadow:
-                        '0 1px 4px rgba(0,0,0,0.08)',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
                     height: 64
                 }}>
                     <div
-                        onClick={() =>
-                            setCollapsed(!collapsed)}
+                        onClick={() => setCollapsed(!collapsed)}
                         style={{
                             cursor: 'pointer',
                             padding: 8,
@@ -204,9 +198,7 @@ const AppLayout = ({ children }) => {
                             fontSize: 18
                         }}
                     >
-                        {collapsed ?
-                            <MenuUnfoldOutlined /> :
-                            <MenuFoldOutlined />}
+                        {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
                     </div>
 
                     <div style={{
@@ -236,13 +228,11 @@ const AppLayout = ({ children }) => {
                                 borderRadius: 8
                             }}>
                                 <Avatar style={{
-                                    backgroundColor:
-                                        couleurRole[role],
+                                    backgroundColor: couleurRole[role],
                                     fontSize: 14,
                                     fontWeight: 'bold'
                                 }}>
-                                    {nom?.charAt(0)
-                                        ?.toUpperCase()}
+                                    {nom?.charAt(0)?.toUpperCase()}
                                 </Avatar>
                                 <div>
                                     <div style={{
@@ -255,10 +245,10 @@ const AppLayout = ({ children }) => {
                                     </div>
                                     <div style={{
                                         fontSize: 11,
-                                        color:
-                                            couleurRole[role]
+                                        color: couleurRole[role]
                                     }}>
-                                        {role}
+                                        {role === 'responsable' ? 'Responsable' : 
+                                         role === 'agent' ? 'Agent' : 'Technicien'}
                                     </div>
                                 </div>
                             </div>

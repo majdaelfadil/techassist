@@ -38,6 +38,16 @@ class EstResponsable(BasePermission):
             return True
         return request.user.profil.role == 'responsable'
 
+class EstAgent(BasePermission):
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        if not hasattr(request.user, 'profil'):
+            return True
+        # ✅ Agent seulement
+        # Le responsable a son propre accès
+        return request.user.profil.role == 'agent'
+
 class EstAgentOuResponsable(BasePermission):
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
@@ -56,11 +66,12 @@ class EstTechnicien(BasePermission):
 
 # ════════════════════════════════
 # ─── CLIENTS ───
+# Agent seulement
 # ════════════════════════════════
 
 class ClientListCreateView(generics.ListCreateAPIView):
     serializer_class = ClientSerializer
-    permission_classes = [EstAgentOuResponsable]
+    permission_classes = [EstAgent]
 
     def get_queryset(self):
         queryset = Client.objects.all()
@@ -75,10 +86,11 @@ class ClientListCreateView(generics.ListCreateAPIView):
 class ClientDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
-    permission_classes = [EstAgentOuResponsable]
+    permission_classes = [EstAgent]
 
 # ════════════════════════════════
 # ─── TECHNICIENS ───
+# Responsable gère les techniciens
 # ════════════════════════════════
 
 class TechnicienListView(generics.ListCreateAPIView):
@@ -103,6 +115,7 @@ class TechnicienDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 # ════════════════════════════════
 # ─── AGENTS ───
+# Géré par le responsable
 # ════════════════════════════════
 
 class AgentListCreateView(generics.ListCreateAPIView):
@@ -119,11 +132,12 @@ class AgentDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 # ════════════════════════════════
 # ─── APPAREILS ───
+# Agent seulement
 # ════════════════════════════════
 
 class AppareilListCreateView(generics.ListCreateAPIView):
     serializer_class = AppareilSerializer
-    permission_classes = [EstAgentOuResponsable]
+    permission_classes = [EstAgent]
 
     def get_queryset(self):
         queryset = Appareil.objects.all()
@@ -135,10 +149,12 @@ class AppareilListCreateView(generics.ListCreateAPIView):
 class AppareilDetailView(generics.RetrieveUpdateAPIView):
     queryset = Appareil.objects.all()
     serializer_class = AppareilSerializer
-    permission_classes = [EstAgentOuResponsable]
+    permission_classes = [EstAgent]
 
 # ════════════════════════════════
 # ─── PIECES ───
+# Agent gère le stock (POST, PUT, DELETE)
+# Responsable et Technicien : lecture seulement (GET)
 # ════════════════════════════════
 
 class PieceListCreateView(generics.ListCreateAPIView):
@@ -148,7 +164,7 @@ class PieceListCreateView(generics.ListCreateAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [IsAuthenticated()]
-        return [EstResponsable()]
+        return [EstAgent()]
 
 class PieceDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Piece.objects.all()
@@ -157,17 +173,20 @@ class PieceDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [IsAuthenticated()]
-        return [EstResponsable()]
+        return [EstAgent()]
 
 # ════════════════════════════════
 # ─── INTERVENTIONS ───
+# Agent : lecture seulement + créer
+# Responsable : gestion complète
+# Technicien : voir ses interventions + modifier notes/durée
 # ════════════════════════════════
 
 class InterventionListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [EstAgentOuResponsable()]
+            return [EstAgent()]  # Agent crée
         return [IsAuthenticated()]
 
     def get_serializer_class(self):
@@ -179,6 +198,7 @@ class InterventionListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         queryset = Intervention.objects.all()
 
+        # Technicien voit seulement ses interventions
         if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
                 technicien = Technicien.objects.get(user=user)
@@ -211,7 +231,7 @@ class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_permissions(self):
         if self.request.method == 'DELETE':
-            return [EstAgentOuResponsable()]
+            return [EstResponsable()]  # Supprimer : responsable seulement
         return [IsAuthenticated()]
 
     def update(self, request, *args, **kwargs):
@@ -272,6 +292,12 @@ class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
                     'champs_interdits': list(champs_interdits),
                     'champs_autorises': list(champs_autorises)
                 }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Agent : peut seulement créer, pas modifier les interventions
+        if (hasattr(user, 'profil') and user.profil.role == 'agent'):
+            return Response({
+                'erreur': 'L\'agent ne peut pas modifier une intervention'
+            }, status=status.HTTP_403_FORBIDDEN)
 
         return super().update(request, *args, **kwargs)
 
@@ -292,18 +318,23 @@ class InterventionChangerStatutView(APIView):
                 status=status.HTTP_404_NOT_FOUND)
 
         user = request.user
-        est_technicien = (
-            hasattr(user, 'profil') and
-            user.profil.role == 'technicien'
-        )
+        role = (user.profil.role
+                if hasattr(user, 'profil')
+                else 'responsable')
 
-        # ── Vérification : technicien = uniquement ses propres interventions ──
-        if est_technicien:
+        # Agent ne peut pas changer le statut
+        if role == 'agent':
+            return Response({
+                'erreur': 'L\'agent ne peut pas changer le statut d\'une intervention'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # Technicien : seulement ses interventions
+        if role == 'technicien':
             try:
                 tech = Technicien.objects.get(user=user)
                 if intervention.technicien != tech:
                     return Response(
-                        {'erreur': 'Accès refusé : cette intervention ne vous est pas assignée'},
+                        {'erreur': 'Accès refusé'},
                         status=status.HTTP_403_FORBIDDEN)
             except Technicien.DoesNotExist:
                 return Response(
@@ -317,21 +348,34 @@ class InterventionChangerStatutView(APIView):
                 {'erreur': 'Statut manquant'},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        # ── Vérification : technicien ne peut mettre que en_cours / attente_pieces / termine ──
-        if est_technicien and nouveau_statut not in STATUTS_AUTORISES_TECHNICIEN:
+        # Statuts réservés responsable
+        statuts_responsable = [
+            'diagnostique', 'assigne',
+            'valide', 'facture', 'cloture'
+        ]
+
+        # Statuts réservés technicien
+        statuts_technicien = [
+            'en_cours', 'attente_pieces', 'termine'
+        ]
+
+        if (role == 'technicien' and
+                nouveau_statut in statuts_responsable):
             return Response({
-                'erreur': 'Action non autorisée',
-                'message': f'En tant que technicien, vous pouvez uniquement passer au statut : {", ".join(sorted(STATUTS_AUTORISES_TECHNICIEN))}',
-                'statuts_autorises': sorted(STATUTS_AUTORISES_TECHNICIEN),
-                'statut_demande': nouveau_statut,
+                'erreur': 'Réservé au responsable',
+                'statut_refuse': nouveau_statut
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # ── Vérification de la transition dans le workflow général ──
+        if (role == 'responsable' and
+                nouveau_statut in statuts_technicien):
+            return Response({
+                'erreur': 'Réservé au technicien',
+                'statut_refuse': nouveau_statut
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # Vérification de la transition dans le workflow général
         if not transition_autorisee(intervention.statut, nouveau_statut):
             transitions = get_transitions_possibles(intervention.statut)
-            # Si technicien, on filtre les transitions affichées à celles qu'il peut faire
-            if est_technicien:
-                transitions = [t for t in transitions if t in STATUTS_AUTORISES_TECHNICIEN]
             return Response({
                 'erreur': 'Transition non autorisée',
                 'statut_actuel': intervention.statut,
@@ -346,16 +390,10 @@ class InterventionChangerStatutView(APIView):
 
         intervention.save()
 
-        # Transitions affichées en retour : filtrées selon le rôle
-        transitions_retour = get_transitions_possibles(nouveau_statut)
-        if est_technicien:
-            transitions_retour = [t for t in transitions_retour if t in STATUTS_AUTORISES_TECHNICIEN]
-
         return Response({
             'message': 'Statut changé avec succès',
             'ancien_statut': ancien_statut,
             'nouveau_statut': nouveau_statut,
-            'transitions_possibles': transitions_retour
         }, status=status.HTTP_200_OK)
 
 # ─── TRANSITIONS POSSIBLES ───
@@ -387,9 +425,10 @@ class InterventionTransitionsView(APIView):
             'role': user.profil.role if hasattr(user, 'profil') else 'responsable'
         })
 
-# ─── VALIDER INTERVENTION (version simple existante) ───
+# ─── VALIDER INTERVENTION ───
+# Responsable seulement
 class InterventionValiderView(APIView):
-    permission_classes = [EstAgentOuResponsable]
+    permission_classes = [EstResponsable]
 
     def post(self, request, pk):
         try:
@@ -401,49 +440,29 @@ class InterventionValiderView(APIView):
 
         if intervention.statut != 'termine':
             return Response({
-                'erreur': 'Intervention doit être terminée',
+                'erreur': 'L\'intervention doit être terminée avant validation',
                 'statut_actuel': intervention.statut
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        from decimal import Decimal
-        montant_pieces = sum(
-            Decimal(str(p.quantite)) * p.prix_unitaire
-            for p in intervention.pieces_utilisees.all()
-        )
-
-        duree = Decimal(str(intervention.duree_reelle or intervention.duree_estimee or 1))
-        technicien = intervention.technicien
-        tarif = Decimal(str(technicien.tarif_horaire if technicien else 150))
-        montant_main_oeuvre = duree * tarif
-
-        facture, created = Facture.objects.get_or_create(
-            intervention=intervention,
-            defaults={
-                'montant_main_oeuvre': montant_main_oeuvre,
-                'montant_pieces': montant_pieces,
-                'montant_deplacement': 0,
-                'tva': 20,
-                'statut': 'brouillon'
-            }
-        )
+        # ✅ Vérifier que le rapport est validé
+        if not hasattr(intervention, 'rapport') or \
+                not intervention.rapport or \
+                not intervention.rapport.valide:
+            return Response({
+                'erreur': 'Le rapport du technicien doit être validé avant de valider l\'intervention',
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         intervention.statut = 'valide'
         intervention.save()
 
         return Response({
-            'message': 'Intervention validée et facture générée',
-            'intervention_statut': intervention.statut,
-            'facture': {
-                'numero': facture.numero,
-                'total_ht': facture.total_ht,
-                'total_ttc': facture.total_ttc,
-                'statut': facture.statut
-            }
+            'message': 'Intervention validée !',
+            'nouveau_statut': intervention.statut
         }, status=status.HTTP_200_OK)
 
 
 # ════════════════════════════════════════════════════════════
-# ─── VALIDER INTERVENTION ET GÉNÉRER FACTURE (CORRIGÉ) ───
+# ─── VALIDER INTERVENTION ET GÉNÉRER FACTURE ───
 # ════════════════════════════════════════════════════════════
 def _generer_numero_facture_unique():
     """
@@ -476,7 +495,7 @@ def _generer_numero_facture_unique():
 
 
 class InterventionValiderGenererFactureView(APIView):
-    permission_classes = [EstAgentOuResponsable]
+    permission_classes = [EstResponsable]
 
     def post(self, request, pk):
         try:
@@ -773,7 +792,7 @@ class VerifierDisponibiliteView(APIView):
 
 # ─── ASSIGNER TECHNICIEN AVEC VÉRIFICATION ───
 class AssignerTechnicienView(APIView):
-    permission_classes = [EstAgentOuResponsable]
+    permission_classes = [EstResponsable]
 
     def post(self, request, pk):
         try:
@@ -858,20 +877,21 @@ class AssignerTechnicienView(APIView):
 
 # ════════════════════════════════
 # ─── FACTURES ───
+# Agent gère les factures
 # ════════════════════════════════
 
 class FactureListView(generics.ListAPIView):
     queryset = Facture.objects.all()
     serializer_class = FactureSerializer
-    permission_classes = [EstResponsable]
+    permission_classes = [EstAgent]
 
 class FactureDetailView(generics.RetrieveUpdateAPIView):
     queryset = Facture.objects.all()
     serializer_class = FactureSerializer
-    permission_classes = [EstResponsable]
+    permission_classes = [EstAgent]
 
 class FacturePDFView(APIView):
-    permission_classes = [EstResponsable]
+    permission_classes = [EstAgent]
 
     def get(self, request, pk):
         try:
@@ -918,7 +938,7 @@ class EnvoyerEmailTechnicienView(APIView):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class EnvoyerFactureEmailView(APIView):
-    permission_classes = [EstResponsable]
+    permission_classes = [EstAgent]
 
     def post(self, request, pk):
         try:
@@ -1140,7 +1160,7 @@ TECHNICIEN : {intervention.technicien.nom if intervention.technicien else 'Non a
 
 # ─── VALIDER RAPPORT ───
 class ValiderRapportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EstResponsable]
 
     def post(self, request, pk):
         try:
@@ -1149,19 +1169,6 @@ class ValiderRapportView(APIView):
             return Response(
                 {'erreur': 'Rapport non trouvé'},
                 status=status.HTTP_404_NOT_FOUND)
-
-        user = request.user
-        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
-            try:
-                tech = Technicien.objects.get(user=user)
-                if rapport.intervention.technicien != tech:
-                    return Response(
-                        {'erreur': 'Accès refusé'},
-                        status=status.HTTP_403_FORBIDDEN)
-            except Technicien.DoesNotExist:
-                return Response(
-                    {'erreur': 'Accès refusé'},
-                    status=status.HTTP_403_FORBIDDEN)
 
         rapport.valide = True
         rapport.date_validation = timezone.now()
