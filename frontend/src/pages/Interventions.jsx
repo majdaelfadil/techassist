@@ -9,9 +9,8 @@ import {
     PlusOutlined, SearchOutlined, EyeOutlined,
     DeleteOutlined, FilterOutlined,
     SwapOutlined, UserAddOutlined, ReloadOutlined,
-    CheckCircleOutlined, DollarOutlined
+    CheckCircleOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 const { Option } = Select;
@@ -38,7 +37,6 @@ const Interventions = () => {
     const [form] = Form.useForm();
     const [formStatut] = Form.useForm();
     const [formAssigner] = Form.useForm();
-    const navigate = useNavigate();
 
     // ─── CHARGER DONNÉES AVEC useCallback ───
     const chargerInterventions = useCallback(async () => {
@@ -226,12 +224,6 @@ const Interventions = () => {
             setInterventionSelectionnee(res.data);
             setDrawerDetail(true);
         } catch (error) {}
-    };
-
-    // ─── NAVIGUER VERS FACTURES ───
-    const allerVersFactures = () => {
-        setModalValidation(false);
-        navigate('/factures');
     };
 
     // ─── FILTRAGE LOCAL ───
@@ -771,9 +763,6 @@ const Interventions = () => {
                                                 Une fois validée, l'intervention passera en statut <strong>VALIDÉ</strong> 
                                                 et une <strong>facture sera automatiquement générée</strong>.
                                             </p>
-                                            <p style={{ marginTop: 8, marginBottom: 0, color: '#FF8C00' }}>
-                                                💰 La facture sera disponible dans l'onglet "Factures"
-                                            </p>
                                         </div>
                                     }
                                     style={{ borderRadius: 8 }}
@@ -807,7 +796,7 @@ const Interventions = () => {
                         title="Intervention validée avec succès !"
                         subTitle={
                             <div style={{ marginTop: 8 }}>
-                                <p>La facture a été générée.</p>
+                                <p>La facture a été générée automatiquement.</p>
                                 <div style={{
                                     background: '#f6ffed',
                                     padding: '12px',
@@ -823,20 +812,13 @@ const Interventions = () => {
                         }
                         extra={[
                             <Button
-                                key="factures"
-                                type="primary"
-                                icon={<DollarOutlined />}
-                                onClick={allerVersFactures}
-                                style={{ background: '#FF8C00', borderColor: '#FF8C00' }}
-                            >
-                                Voir toutes les factures
-                            </Button>,
-                            <Button
                                 key="close"
+                                type="primary"
                                 onClick={() => {
                                     setModalValidation(false);
                                     setValidationResult(null);
                                 }}
+                                style={{ background: '#FF8C00', borderColor: '#FF8C00' }}
                             >
                                 Fermer
                             </Button>,
@@ -862,7 +844,7 @@ const Interventions = () => {
                     layout="vertical"
                     onFinish={assignerTechnicien}
                     style={{ marginTop: 16 }}
-                    onValuesChange={(_, allValues) => {
+                    onValuesChange={() => {
                         setDisponibilite(null);
                     }}
                 >
