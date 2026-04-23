@@ -1054,22 +1054,27 @@ class DashboardStatsView(APIView):
             'par_type': list(par_type),
         })
 
-# ─── GÉNÉRER RAPPORT IA ───
+
+# ─── GÉNÉRER RAPPORT IA AVEC GROQ ───
 class GenererRapportIAView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         try:
-            intervention = Intervention.objects.get(pk=pk)
+            intervention = Intervention.objects.get(
+                pk=pk)
         except Intervention.DoesNotExist:
             return Response(
                 {'erreur': 'Intervention non trouvée'},
                 status=status.HTTP_404_NOT_FOUND)
 
+        # Vérifier que c'est le bon technicien
         user = request.user
-        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and
+                user.profil.role == 'technicien'):
             try:
-                tech = Technicien.objects.get(user=user)
+                tech = Technicien.objects.get(
+                    user=user)
                 if intervention.technicien != tech:
                     return Response(
                         {'erreur': 'Accès refusé'},
@@ -1079,75 +1084,160 @@ class GenererRapportIAView(APIView):
                     {'erreur': 'Accès refusé'},
                     status=status.HTTP_403_FORBIDDEN)
 
+        # Vérifier que des notes existent
         if not intervention.notes_technicien:
             return Response({
-                'erreur': 'Saisissez d\'abord vos notes'
+                'erreur':
+                    'Saisissez d\'abord '
+                    'vos notes techniques'
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        # ─── APPEL API GROQ ───
         try:
-            import google.generativeai as genai
+            from groq import Groq
             import os
 
-            genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-            model = genai.GenerativeModel('gemini-pro')
+            client = Groq(
+                api_key=os.getenv('GROQ_API_KEY')
+            )
 
-            prompt = f"""
-Tu es un expert en maintenance informatique.
-Génère un rapport professionnel structuré
-basé sur ces informations :
+            # Préparer les infos de l'intervention
+            appareil_info = (
+                f"{intervention.appareil.marque} "
+                f"{intervention.appareil.modele} "
+                f"({intervention.appareil.type_appareil})"
+                if intervention.appareil
+                else "Non spécifié"
+            )
 
-INTERVENTION : {intervention.numero}
-CLIENT : {intervention.client.nom}
-TYPE : {intervention.type_service}
-APPAREIL : {f"{intervention.appareil.marque} {intervention.appareil.modele}" if intervention.appareil else "Non spécifié"}
-DESCRIPTION DU PROBLÈME :
+            pieces_info = ""
+            pieces = intervention.pieces_utilisees.all()
+            if pieces:
+                pieces_info = "\nPIÈCES UTILISÉES :\n"
+                for p in pieces:
+                    pieces_info += (
+                        f"- {p.piece.nom} "
+                        f"x{p.quantite} "
+                        f"({p.prix_unitaire} MAD/u)\n"
+                    )
+
+            prompt = f"""Tu es un expert en maintenance informatique et rédige des rapports professionnels.
+
+Génère un rapport d'intervention technique complet et professionnel basé sur les informations suivantes :
+
+INFORMATIONS DE L'INTERVENTION :
+- Numéro : {intervention.numero}
+- Date : {intervention.date_creation.strftime('%d/%m/%Y')}
+- Type de service : {intervention.type_service}
+- Niveau d'urgence : {intervention.urgence}
+
+CLIENT :
+- Nom : {intervention.client.nom}
+- Téléphone : {intervention.client.telephone}
+
+APPAREIL :
+{appareil_info}
+
+DESCRIPTION DU PROBLÈME SIGNALÉ :
 {intervention.description}
 
 NOTES DU TECHNICIEN :
 {intervention.notes_technicien}
 
-Le rapport doit contenir :
-1. Résumé de l'intervention
-2. Diagnostic établi
-3. Actions réalisées
-4. Résultat obtenu
-5. Recommandations
+DURÉE D'INTERVENTION :
+{f"{intervention.duree_reelle}h (réelle)" if intervention.duree_reelle else f"{intervention.duree_estimee}h (estimée)" if intervention.duree_estimee else "Non renseignée"}
+{pieces_info}
 
-Rédige en français de manière professionnelle.
-            """
+TECHNICIEN : {intervention.technicien.nom if intervention.technicien else "Non assigné"}
 
-            response = model.generate_content(prompt)
-            contenu_rapport = response.text
+Le rapport doit être structuré exactement ainsi :
+
+1. RÉSUMÉ DE L'INTERVENTION
+   (résumé concis en 2-3 phrases)
+
+2. DIAGNOSTIC ÉTABLI
+   (description technique du problème identifié)
+
+3. ACTIONS RÉALISÉES
+   (liste détaillée des actions effectuées)
+
+4. PIÈCES REMPLACÉES
+   (si applicable, sinon indiquer "Aucune pièce remplacée")
+
+5. RÉSULTAT OBTENU
+   (état de l'équipement après intervention)
+
+6. RECOMMANDATIONS
+   (conseils pour éviter la récurrence du problème)
+
+Rédige en français, de manière professionnelle et technique. Sois précis et concis."""
+
+            # Appel Groq avec le modèle llama
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Tu es un expert en "
+                            "maintenance informatique "
+                            "qui rédige des rapports "
+                            "techniques professionnels "
+                            "pour une société de services "
+                            "informatiques au Maroc."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                # Modèle rapide et gratuit de Groq
+                model="llama-3.3-70b-versatile",
+                temperature=0.3,
+                max_tokens=2048,
+            )
+
+            contenu_rapport = (
+                chat_completion.choices[0]
+                .message.content
+            )
+            genere_par_ia = True
 
         except Exception as e:
-            contenu_rapport = f"""
-RAPPORT D'INTERVENTION — {intervention.numero}
+            print(f"Erreur Groq : {e}")
+            # Rapport basique si Groq échoue
+            contenu_rapport = f"""RAPPORT D'INTERVENTION — {intervention.numero}
 
-CLIENT : {intervention.client.nom}
 DATE : {intervention.date_creation.strftime('%d/%m/%Y')}
+CLIENT : {intervention.client.nom}
 TYPE : {intervention.type_service}
+APPAREIL : {appareil_info if intervention.appareil else 'Non spécifié'}
 
-DESCRIPTION DU PROBLÈME :
+1. RÉSUMÉ DE L'INTERVENTION
 {intervention.description}
 
-DIAGNOSTIC ET ACTIONS RÉALISÉES :
+2. DIAGNOSTIC ET ACTIONS RÉALISÉES
 {intervention.notes_technicien}
 
-TECHNICIEN : {intervention.technicien.nom if intervention.technicien else 'Non assigné'}
-            """
+3. TECHNICIEN
+{intervention.technicien.nom if intervention.technicien else 'Non assigné'}
 
+— Rapport généré sans IA (clé API non configurée) —"""
+            genere_par_ia = False
+
+        # Créer ou mettre à jour le rapport
         rapport, created = Rapport.objects.get_or_create(
             intervention=intervention,
             defaults={
                 'contenu': contenu_rapport,
-                'genere_par_ia': True,
+                'genere_par_ia': genere_par_ia,
                 'valide': False
             }
         )
 
         if not created:
             rapport.contenu = contenu_rapport
-            rapport.genere_par_ia = True
+            rapport.genere_par_ia = genere_par_ia
             rapport.valide = False
             rapport.save()
 
@@ -1155,7 +1245,9 @@ TECHNICIEN : {intervention.technicien.nom if intervention.technicien else 'Non a
             'message': 'Rapport généré avec succès',
             'rapport_id': rapport.id,
             'contenu': rapport.contenu,
-            'genere_par_ia': rapport.genere_par_ia
+            'genere_par_ia': rapport.genere_par_ia,
+            'modele': 'llama-3.3-70b-versatile'
+                      if genere_par_ia else 'basique'
         }, status=status.HTTP_200_OK)
 
 # ─── VALIDER RAPPORT ───
