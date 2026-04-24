@@ -59,7 +59,7 @@ const AppLayout = ({ children }) => {
                 { key: '/interventions', icon: <ToolOutlined />, label: 'Mes Interventions' },
                 { key: '/planning', icon: <CalendarOutlined />, label: 'Mon Planning' },
                 { key: '/pieces', icon: <AppstoreOutlined />, label: 'Pièces' },
-                { key: '/rapports', icon: <FileTextOutlined />, label: 'Mes Rapports' }
+                { key: '/mes-rapports', icon: <FileTextOutlined />, label: 'Mes Rapports' }
             );
         }
         

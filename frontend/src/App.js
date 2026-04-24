@@ -13,6 +13,8 @@ import Planning from './pages/Planning';
 import AppLayout from './components/Layout';
 import authService from './services/authService';
 import Clients from './pages/Clients';
+import MesRapports from './pages/MesRapports';
+import Rapports from './pages/Rapports';
 
 const ProtectedRoute = ({ children, roles }) => {
     if (!authService.isAuthenticated()) {
@@ -97,6 +99,17 @@ function App() {
                         </ProtectedRoute>
                     }
                 />
+
+                <Route path="/mes-rapports" element={
+                    <ProtectedRoute roles={['technicien']}>
+                        <MesRapports />
+                    </ProtectedRoute>
+                } />
+                 <Route path="/rapports" element={
+                    <ProtectedRoute roles={['responsable']}>
+                        <Rapports />
+                    </ProtectedRoute>
+                } />
                 <Route
                     path="/"
                     element={

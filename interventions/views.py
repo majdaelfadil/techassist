@@ -44,8 +44,6 @@ class EstAgent(BasePermission):
             return False
         if not hasattr(request.user, 'profil'):
             return True
-        # ✅ Agent seulement
-        # Le responsable a son propre accès
         return request.user.profil.role == 'agent'
 
 class EstAgentOuResponsable(BasePermission):
@@ -153,8 +151,8 @@ class AppareilDetailView(generics.RetrieveUpdateAPIView):
 
 # ════════════════════════════════
 # ─── PIECES ───
-# Agent gère le stock (POST, PUT, DELETE)
-# Responsable et Technicien : lecture seulement (GET)
+# Agent gère le stock
+# Responsable et Technicien : lecture seulement
 # ════════════════════════════════
 
 class PieceListCreateView(generics.ListCreateAPIView):
@@ -177,16 +175,13 @@ class PieceDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 # ════════════════════════════════
 # ─── INTERVENTIONS ───
-# Agent : lecture seulement + créer
-# Responsable : gestion complète
-# Technicien : voir ses interventions + modifier notes/durée
 # ════════════════════════════════
 
 class InterventionListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [EstAgent()]  # Agent crée
+            return [EstAgent()]
         return [IsAuthenticated()]
 
     def get_serializer_class(self):
@@ -198,7 +193,6 @@ class InterventionListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         queryset = Intervention.objects.all()
 
-        # Technicien voit seulement ses interventions
         if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
                 technicien = Technicien.objects.get(user=user)
@@ -231,47 +225,46 @@ class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_permissions(self):
         if self.request.method == 'DELETE':
-            return [EstResponsable()]  # Supprimer : responsable seulement
+            return [EstResponsable()]
         return [IsAuthenticated()]
 
     def update(self, request, *args, **kwargs):
         user = request.user
         intervention = self.get_object()
-        
-        # Vérifier la disponibilité si on modifie le technicien ou la date
+
         technicien_id = request.data.get('technicien_id')
         date_planifiee = request.data.get('date_planifiee')
         duree_estimee = request.data.get('duree_estimee')
-        
+
         if technicien_id or date_planifiee or duree_estimee:
             from datetime import datetime, timedelta
             import pytz
-            
+
             tech_id = technicien_id or (intervention.technicien_id if intervention.technicien else None)
             date_plan = date_planifiee or intervention.date_planifiee
             duree = float(duree_estimee or intervention.duree_estimee or 1)
-            
+
             if tech_id and date_plan:
                 try:
                     technicien = Technicien.objects.get(pk=tech_id)
-                    
+
                     if isinstance(date_plan, str):
                         date_debut = datetime.fromisoformat(date_plan.replace('Z', '+00:00'))
                     else:
                         date_debut = date_plan
-                    
+
                     date_fin = date_debut + timedelta(hours=duree)
-                    
+
                     conflits = Intervention.objects.filter(
                         technicien=technicien,
                         date_planifiee__isnull=False,
                         statut__in=['assigne', 'en_cours', 'attente_pieces']
                     ).exclude(pk=intervention.pk)
-                    
+
                     for autre in conflits:
                         duree_autre = float(autre.duree_estimee or 1)
                         fin_autre = autre.date_planifiee + timedelta(hours=duree_autre)
-                        
+
                         if date_debut < fin_autre and date_fin > autre.date_planifiee:
                             return Response({
                                 'erreur': 'Conflit de planning',
@@ -279,8 +272,8 @@ class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
                             }, status=status.HTTP_400_BAD_REQUEST)
                 except Technicien.DoesNotExist:
                     pass
-        
-        # Technicien peut seulement modifier notes_technicien et duree_reelle
+
+        # Technicien : seulement notes + durée réelle
         if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             champs_autorises = {'notes_technicien', 'duree_reelle'}
             champs_envoyes = set(request.data.keys())
@@ -292,8 +285,8 @@ class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
                     'champs_interdits': list(champs_interdits),
                     'champs_autorises': list(champs_autorises)
                 }, status=status.HTTP_403_FORBIDDEN)
-        
-        # Agent : peut seulement créer, pas modifier les interventions
+
+        # Agent : ne peut pas modifier les interventions
         if (hasattr(user, 'profil') and user.profil.role == 'agent'):
             return Response({
                 'erreur': 'L\'agent ne peut pas modifier une intervention'
@@ -302,8 +295,6 @@ class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
         return super().update(request, *args, **kwargs)
 
 # ─── CHANGER STATUT ───
-
-# Statuts que le technicien est autorisé à définir
 STATUTS_AUTORISES_TECHNICIEN = {'en_cours', 'attente_pieces', 'termine'}
 
 class InterventionChangerStatutView(APIView):
@@ -318,17 +309,13 @@ class InterventionChangerStatutView(APIView):
                 status=status.HTTP_404_NOT_FOUND)
 
         user = request.user
-        role = (user.profil.role
-                if hasattr(user, 'profil')
-                else 'responsable')
+        role = user.profil.role if hasattr(user, 'profil') else 'responsable'
 
-        # Agent ne peut pas changer le statut
         if role == 'agent':
             return Response({
                 'erreur': 'L\'agent ne peut pas changer le statut d\'une intervention'
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # Technicien : seulement ses interventions
         if role == 'technicien':
             try:
                 tech = Technicien.objects.get(user=user)
@@ -348,32 +335,21 @@ class InterventionChangerStatutView(APIView):
                 {'erreur': 'Statut manquant'},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        # Statuts réservés responsable
-        statuts_responsable = [
-            'diagnostique', 'assigne',
-            'valide', 'facture', 'cloture'
-        ]
+        statuts_responsable = ['diagnostique', 'assigne', 'valide', 'facture', 'cloture']
+        statuts_technicien = ['en_cours', 'attente_pieces', 'termine']
 
-        # Statuts réservés technicien
-        statuts_technicien = [
-            'en_cours', 'attente_pieces', 'termine'
-        ]
-
-        if (role == 'technicien' and
-                nouveau_statut in statuts_responsable):
+        if role == 'technicien' and nouveau_statut in statuts_responsable:
             return Response({
                 'erreur': 'Réservé au responsable',
                 'statut_refuse': nouveau_statut
             }, status=status.HTTP_403_FORBIDDEN)
 
-        if (role == 'responsable' and
-                nouveau_statut in statuts_technicien):
+        if role == 'responsable' and nouveau_statut in statuts_technicien:
             return Response({
                 'erreur': 'Réservé au technicien',
                 'statut_refuse': nouveau_statut
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # Vérification de la transition dans le workflow général
         if not transition_autorisee(intervention.statut, nouveau_statut):
             transitions = get_transitions_possibles(intervention.statut)
             return Response({
@@ -410,7 +386,6 @@ class InterventionTransitionsView(APIView):
 
         transitions = get_transitions_possibles(intervention.statut)
 
-        # Le technicien ne voit que les transitions qu'il est autorisé à faire
         user = request.user
         est_technicien = (
             hasattr(user, 'profil') and
@@ -426,7 +401,7 @@ class InterventionTransitionsView(APIView):
         })
 
 # ─── VALIDER INTERVENTION ───
-# Responsable seulement
+# Responsable seulement — après validation du rapport
 class InterventionValiderView(APIView):
     permission_classes = [EstResponsable]
 
@@ -444,37 +419,37 @@ class InterventionValiderView(APIView):
                 'statut_actuel': intervention.statut
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Vérifier que le rapport est validé
-        if not hasattr(intervention, 'rapport') or \
-                not intervention.rapport or \
-                not intervention.rapport.valide:
+        # Vérifier que le rapport existe et est validé
+        try:
+            rapport = intervention.rapport
+            if not rapport.valide:
+                return Response({
+                    'erreur': 'Le rapport du technicien doit être validé avant de valider l\'intervention',
+                    'conseil': 'Validez d\'abord le rapport depuis la liste des rapports'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
             return Response({
-                'erreur': 'Le rapport du technicien doit être validé avant de valider l\'intervention',
+                'erreur': 'Aucun rapport trouvé pour cette intervention',
+                'conseil': 'Le technicien doit d\'abord générer et enregistrer son rapport'
             }, status=status.HTTP_400_BAD_REQUEST)
 
         intervention.statut = 'valide'
         intervention.save()
 
         return Response({
-            'message': 'Intervention validée !',
+            'message': 'Intervention validée avec succès !',
             'nouveau_statut': intervention.statut
         }, status=status.HTTP_200_OK)
-
 
 # ════════════════════════════════════════════════════════════
 # ─── VALIDER INTERVENTION ET GÉNÉRER FACTURE ───
 # ════════════════════════════════════════════════════════════
 def _generer_numero_facture_unique():
-    """
-    Génère un numéro de facture unique de manière atomique.
-    Évite les doublons dus à une séquence désynchronisée en base.
-    """
     from datetime import datetime
     annee = datetime.now().year
     prefix = f"FAC/{annee}/"
 
     with transaction.atomic():
-        # Verrouille les lignes pour éviter les race conditions
         derniere = (
             Facture.objects
             .filter(numero__startswith=prefix)
@@ -511,6 +486,18 @@ class InterventionValiderGenererFactureView(APIView):
                 'statut_actuel': intervention.statut
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        # Vérifier rapport validé
+        try:
+            rapport = intervention.rapport
+            if not rapport.valide:
+                return Response({
+                    'erreur': 'Le rapport du technicien doit être validé avant de valider l\'intervention',
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response({
+                'erreur': 'Aucun rapport trouvé. Le technicien doit générer et enregistrer son rapport.',
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         from decimal import Decimal
         montant_pieces = sum(
             Decimal(str(p.quantite)) * p.prix_unitaire
@@ -524,7 +511,6 @@ class InterventionValiderGenererFactureView(APIView):
 
         try:
             with transaction.atomic():
-                # Si une facture existe déjà pour cette intervention, on la met à jour
                 facture_existante = (
                     Facture.objects
                     .select_for_update()
@@ -538,7 +524,6 @@ class InterventionValiderGenererFactureView(APIView):
                     facture_existante.save()
                     facture = facture_existante
                 else:
-                    # Générer un numéro unique à l'intérieur d'une transaction atomique
                     numero = _generer_numero_facture_unique()
                     facture = Facture.objects.create(
                         intervention=intervention,
@@ -554,8 +539,6 @@ class InterventionValiderGenererFactureView(APIView):
                 intervention.save()
 
         except IntegrityError:
-            # Dernier recours : en cas de collision extrêmement rare,
-            # on réessaie une fois avec un nouveau numéro
             try:
                 with transaction.atomic():
                     numero = _generer_numero_facture_unique()
@@ -587,7 +570,6 @@ class InterventionValiderGenererFactureView(APIView):
                 'statut': facture.statut
             }
         }, status=status.HTTP_200_OK)
-
 
 # ════════════════════════════════
 # ─── RAPPORTS ───
@@ -641,6 +623,34 @@ class MonPlanningView(APIView):
 
         return Response({
             'technicien': tech.nom,
+            'interventions': serializer.data
+        })
+
+# ─── PLANNING D'UN TECHNICIEN SPÉCIFIQUE ───
+# Responsable peut voir le planning de n'importe quel technicien
+class PlanningTechnicienView(APIView):
+    permission_classes = [EstResponsable]
+
+    def get(self, request, pk):
+        try:
+            tech = Technicien.objects.get(pk=pk)
+        except Technicien.DoesNotExist:
+            return Response(
+                {'erreur': 'Technicien non trouvé'},
+                status=status.HTTP_404_NOT_FOUND)
+
+        interventions = Intervention.objects.filter(
+            technicien=tech,
+            date_planifiee__isnull=False
+        ).order_by('date_planifiee')
+
+        serializer = InterventionListSerializer(interventions, many=True)
+
+        return Response({
+            'technicien': tech.nom,
+            'technicien_id': tech.id,
+            'specialite': tech.specialite,
+            'disponible': tech.disponible,
             'interventions': serializer.data
         })
 
@@ -716,20 +726,20 @@ class VerifierDisponibiliteView(APIView):
 
         if not dans_matin and not dans_aprem:
             if jour_semaine == 5:
-                message = f'Le samedi, les interventions sont uniquement de 08h30 à 13h00. Heure demandée : {date_locale.strftime("%H:%M")}'
+                msg = f'Le samedi, les interventions sont uniquement de 08h30 à 13h00. Heure demandée : {date_locale.strftime("%H:%M")}'
             else:
-                message = f'Heure {date_locale.strftime("%H:%M")} en dehors des horaires de travail. Horaires : 8h30-13h00 et 15h00-19h00'
+                msg = f'Heure {date_locale.strftime("%H:%M")} en dehors des horaires. Horaires : 8h30-13h00 et 15h00-19h00'
             return Response({
                 'disponible': False,
                 'raison': 'hors_horaires',
-                'message': message,
+                'message': msg,
             }, status=status.HTTP_200_OK)
 
         if dans_matin and heure_fin > matin_fin:
             return Response({
                 'disponible': False,
                 'raison': 'depasse_horaires',
-                'message': f'L\'intervention se termine à {date_fin_locale.strftime("%H:%M")} et dépasse la fin de matinée (13h00).',
+                'message': f'L\'intervention se termine à {date_fin_locale.strftime("%H:%M")} et dépasse 13h00.',
                 'suggestion': 'Réduisez la durée ou planifiez après 15h00' if jour_semaine < 5 else 'Réduisez la durée estimée'
             }, status=status.HTTP_200_OK)
 
@@ -737,7 +747,7 @@ class VerifierDisponibiliteView(APIView):
             return Response({
                 'disponible': False,
                 'raison': 'depasse_horaires',
-                'message': f'L\'intervention se termine à {date_fin_locale.strftime("%H:%M")} et dépasse la fin de journée (19h00).',
+                'message': f'L\'intervention se termine à {date_fin_locale.strftime("%H:%M")} et dépasse 19h00.',
                 'suggestion': 'Réduisez la durée ou planifiez le lendemain matin'
             }, status=status.HTTP_200_OK)
 
@@ -756,27 +766,27 @@ class VerifierDisponibiliteView(APIView):
             duree_i = float(i.duree_estimee or 1)
             debut_i = i.date_planifiee
             fin_i = debut_i + timedelta(hours=duree_i)
-            
+
             if date_debut < fin_i and date_fin > debut_i:
                 debut_chevauch = max(date_debut, debut_i)
                 fin_chevauch = min(date_fin, fin_i)
                 duree_chevauch = (fin_chevauch - debut_chevauch).total_seconds() / 3600
                 temps_total_chevauchant += duree_chevauch
-                
+
                 conflits.append({
                     'numero': i.numero,
                     'client': i.client.nom,
                     'debut': debut_i.strftime('%d/%m/%Y %H:%M'),
                     'fin': fin_i.strftime('%d/%m/%Y %H:%M'),
                     'duree': f'{duree_i}h',
-                    'chevauchenent': f'{duree_chevauch:.1f}h'
+                    'chevauchement': f'{duree_chevauch:.1f}h'
                 })
 
         if conflits:
             return Response({
                 'disponible': False,
                 'raison': 'conflit',
-                'message': f'Le technicien {technicien.nom} a déjà {len(conflits)} intervention(s) qui chevauchent cette période (total chevauchement: {temps_total_chevauchant:.1f}h).',
+                'message': f'Le technicien {technicien.nom} a {len(conflits)} intervention(s) en conflit.',
                 'conflits': conflits,
                 'suggestion': 'Choisissez une autre date ou horaire'
             }, status=status.HTTP_200_OK)
@@ -822,7 +832,6 @@ class AssignerTechnicienView(APIView):
             )
 
         from datetime import datetime, timedelta
-        import pytz
 
         if isinstance(date_planifiee, str):
             date_debut = datetime.fromisoformat(date_planifiee.replace('Z', '+00:00'))
@@ -846,12 +855,6 @@ class AssignerTechnicienView(APIView):
                 return Response({
                     'erreur': 'Conflit de planning',
                     'message': f'Le technicien est déjà occupé du {autre.date_planifiee.strftime("%d/%m/%Y %H:%M")} au {fin_autre.strftime("%H:%M")} pour l\'intervention {autre.numero}',
-                    'conflit': {
-                        'intervention': autre.numero,
-                        'client': autre.client.nom,
-                        'debut': autre.date_planifiee.strftime('%d/%m/%Y %H:%M'),
-                        'fin': fin_autre.strftime('%d/%m/%Y %H:%M')
-                    }
                 }, status=status.HTTP_400_BAD_REQUEST)
 
         intervention.technicien = technicien
@@ -975,7 +978,7 @@ class MonProfilView(APIView):
     def get(self, request):
         user = request.user
         role = 'responsable'
-        nom = (user.get_full_name() or user.username)
+        nom = user.get_full_name() or user.username
         telephone = ''
         technicien_id = None
         agent_id = None
@@ -1054,27 +1057,25 @@ class DashboardStatsView(APIView):
             'par_type': list(par_type),
         })
 
+# ════════════════════════════════
+# ─── RAPPORT IA AVEC GROQ ───
+# ════════════════════════════════
 
-# ─── GÉNÉRER RAPPORT IA AVEC GROQ ───
 class GenererRapportIAView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         try:
-            intervention = Intervention.objects.get(
-                pk=pk)
+            intervention = Intervention.objects.get(pk=pk)
         except Intervention.DoesNotExist:
             return Response(
                 {'erreur': 'Intervention non trouvée'},
                 status=status.HTTP_404_NOT_FOUND)
 
-        # Vérifier que c'est le bon technicien
         user = request.user
-        if (hasattr(user, 'profil') and
-                user.profil.role == 'technicien'):
+        if (hasattr(user, 'profil') and user.profil.role == 'technicien'):
             try:
-                tech = Technicien.objects.get(
-                    user=user)
+                tech = Technicien.objects.get(user=user)
                 if intervention.technicien != tech:
                     return Response(
                         {'erreur': 'Accès refusé'},
@@ -1084,42 +1085,30 @@ class GenererRapportIAView(APIView):
                     {'erreur': 'Accès refusé'},
                     status=status.HTTP_403_FORBIDDEN)
 
-        # Vérifier que des notes existent
         if not intervention.notes_technicien:
             return Response({
-                'erreur':
-                    'Saisissez d\'abord '
-                    'vos notes techniques'
+                'erreur': 'Saisissez d\'abord vos notes techniques'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # ─── APPEL API GROQ ───
+        appareil_info = (
+            f"{intervention.appareil.marque} "
+            f"{intervention.appareil.modele} "
+            f"({intervention.appareil.type_appareil})"
+            if intervention.appareil else "Non spécifié"
+        )
+
+        pieces_info = ""
+        pieces = intervention.pieces_utilisees.all()
+        if pieces:
+            pieces_info = "\nPIÈCES UTILISÉES :\n"
+            for p in pieces:
+                pieces_info += f"- {p.piece.nom} x{p.quantite} ({p.prix_unitaire} MAD/u)\n"
+
         try:
             from groq import Groq
             import os
 
-            client = Groq(
-                api_key=os.getenv('GROQ_API_KEY')
-            )
-
-            # Préparer les infos de l'intervention
-            appareil_info = (
-                f"{intervention.appareil.marque} "
-                f"{intervention.appareil.modele} "
-                f"({intervention.appareil.type_appareil})"
-                if intervention.appareil
-                else "Non spécifié"
-            )
-
-            pieces_info = ""
-            pieces = intervention.pieces_utilisees.all()
-            if pieces:
-                pieces_info = "\nPIÈCES UTILISÉES :\n"
-                for p in pieces:
-                    pieces_info += (
-                        f"- {p.piece.nom} "
-                        f"x{p.quantite} "
-                        f"({p.prix_unitaire} MAD/u)\n"
-                    )
+            client = Groq(api_key=os.getenv('GROQ_API_KEY'))
 
             prompt = f"""Tu es un expert en maintenance informatique et rédige des rapports professionnels.
 
@@ -1172,18 +1161,14 @@ Le rapport doit être structuré exactement ainsi :
 
 Rédige en français, de manière professionnelle et technique. Sois précis et concis."""
 
-            # Appel Groq avec le modèle llama
             chat_completion = client.chat.completions.create(
                 messages=[
                     {
                         "role": "system",
                         "content": (
-                            "Tu es un expert en "
-                            "maintenance informatique "
-                            "qui rédige des rapports "
-                            "techniques professionnels "
-                            "pour une société de services "
-                            "informatiques au Maroc."
+                            "Tu es un expert en maintenance informatique "
+                            "qui rédige des rapports techniques professionnels "
+                            "pour une société de services informatiques au Maroc."
                         )
                     },
                     {
@@ -1191,27 +1176,22 @@ Rédige en français, de manière professionnelle et technique. Sois précis et 
                         "content": prompt
                     }
                 ],
-                # Modèle rapide et gratuit de Groq
                 model="llama-3.3-70b-versatile",
                 temperature=0.3,
                 max_tokens=2048,
             )
 
-            contenu_rapport = (
-                chat_completion.choices[0]
-                .message.content
-            )
+            contenu_rapport = chat_completion.choices[0].message.content
             genere_par_ia = True
 
         except Exception as e:
             print(f"Erreur Groq : {e}")
-            # Rapport basique si Groq échoue
             contenu_rapport = f"""RAPPORT D'INTERVENTION — {intervention.numero}
 
 DATE : {intervention.date_creation.strftime('%d/%m/%Y')}
 CLIENT : {intervention.client.nom}
 TYPE : {intervention.type_service}
-APPAREIL : {appareil_info if intervention.appareil else 'Non spécifié'}
+APPAREIL : {appareil_info}
 
 1. RÉSUMÉ DE L'INTERVENTION
 {intervention.description}
@@ -1225,7 +1205,6 @@ APPAREIL : {appareil_info if intervention.appareil else 'Non spécifié'}
 — Rapport généré sans IA (clé API non configurée) —"""
             genere_par_ia = False
 
-        # Créer ou mettre à jour le rapport
         rapport, created = Rapport.objects.get_or_create(
             intervention=intervention,
             defaults={
@@ -1246,11 +1225,14 @@ APPAREIL : {appareil_info if intervention.appareil else 'Non spécifié'}
             'rapport_id': rapport.id,
             'contenu': rapport.contenu,
             'genere_par_ia': rapport.genere_par_ia,
-            'modele': 'llama-3.3-70b-versatile'
-                      if genere_par_ia else 'basique'
+            'modele': 'llama-3.3-70b-versatile' if genere_par_ia else 'basique'
         }, status=status.HTTP_200_OK)
 
+# ════════════════════════════════
 # ─── VALIDER RAPPORT ───
+# Responsable seulement
+# ════════════════════════════════
+
 class ValiderRapportView(APIView):
     permission_classes = [EstResponsable]
 
@@ -1262,18 +1244,32 @@ class ValiderRapportView(APIView):
                 {'erreur': 'Rapport non trouvé'},
                 status=status.HTTP_404_NOT_FOUND)
 
+        # Déjà validé
+        if rapport.valide:
+            return Response({
+                'message': 'Rapport déjà validé',
+                'rapport_id': rapport.id,
+                'date_validation': rapport.date_validation
+            }, status=status.HTTP_200_OK)
+
         rapport.valide = True
         rapport.date_validation = timezone.now()
         rapport.save()
 
         return Response({
-            'message': 'Rapport validé avec succès',
+            'message': 'Rapport validé avec succès !',
             'rapport_id': rapport.id,
+            'intervention': rapport.intervention.numero,
+            'technicien': rapport.intervention.technicien.nom
+                if rapport.intervention.technicien else 'N/A',
             'valide': rapport.valide,
             'date_validation': rapport.date_validation
         }, status=status.HTTP_200_OK)
 
-# ─── AJOUTER PIECE UTILISEE ───
+# ────────────────────────────────────────────────────────────
+# ─── PIÈCES UTILISÉES ───
+# ────────────────────────────────────────────────────────────
+
 class AjouterPieceUtiliseeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1351,7 +1347,7 @@ class AjouterPieceUtiliseeView(APIView):
                 'sous_total': str(quantite * piece.prix_unitaire)
             }, status=status.HTTP_200_OK)
 
-        piece_utilisee = PieceUtilisee.objects.create(
+        PieceUtilisee.objects.create(
             intervention=intervention,
             piece=piece,
             quantite=quantite,
@@ -1371,7 +1367,7 @@ class AjouterPieceUtiliseeView(APIView):
             'sous_total': str(quantite * piece.prix_unitaire)
         }, status=status.HTTP_201_CREATED)
 
-# ─── SUPPRIMER PIECE UTILISEE ───
+
 class SupprimerPieceUtiliseeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1399,7 +1395,6 @@ class SupprimerPieceUtiliseeView(APIView):
         piece = piece_utilisee.piece
         piece.quantite_stock += piece_utilisee.quantite
         piece.save()
-
         piece_utilisee.delete()
 
         return Response({
@@ -1407,7 +1402,7 @@ class SupprimerPieceUtiliseeView(APIView):
             'stock_restaure': piece.quantite_stock
         }, status=status.HTTP_200_OK)
 
-# ─── LISTE PIECES UTILISEES PAR INTERVENTION ───
+
 class ListePiecesUtiliseesView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1421,7 +1416,6 @@ class ListePiecesUtiliseesView(APIView):
 
         pieces = intervention.pieces_utilisees.all()
         serializer = PieceUtiliseeSerializer(pieces, many=True)
-
         total = sum(p.quantite * p.prix_unitaire for p in pieces)
 
         return Response({

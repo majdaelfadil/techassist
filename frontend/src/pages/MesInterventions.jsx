@@ -10,7 +10,8 @@ import {
     FileTextOutlined, CheckCircleOutlined,
     ReloadOutlined, RobotOutlined,
     PlusOutlined, DeleteOutlined,
-    AppstoreOutlined
+    AppstoreOutlined, SaveOutlined,
+    ClockCircleOutlined
 } from '@ant-design/icons';
 import api from '../services/api';
 
@@ -28,6 +29,7 @@ const MesInterventions = () => {
     const [rapport, setRapport] = useState(null);
     const [transitions, setTransitions] = useState([]);
     const [loadingRapport, setLoadingRapport] = useState(false);
+    const [savingRapport, setSavingRapport] = useState(false);
     const [pieces, setPieces] = useState([]);
     const [piecesUtilisees, setPiecesUtilisees] = useState([]);
     const [savingNotes, setSavingNotes] = useState(false);
@@ -94,73 +96,61 @@ const MesInterventions = () => {
     };
 
     // ─── SAUVEGARDER NOTES ───
-   const sauvegarderNotes = async (values) => {
-    setSavingNotes(true);
-    try {
-        const payload = {
-            notes_technicien: values.notes_technicien,
-        };
-        if (values.duree_reelle !== undefined &&
-            values.duree_reelle !== null &&
-            values.duree_reelle !== '') {
-            payload.duree_reelle = values.duree_reelle;
+    const sauvegarderNotes = async (values) => {
+        setSavingNotes(true);
+        try {
+            const payload = {
+                notes_technicien: values.notes_technicien,
+            };
+            if (values.duree_reelle !== undefined &&
+                values.duree_reelle !== null &&
+                values.duree_reelle !== '') {
+                payload.duree_reelle = values.duree_reelle;
+            }
+
+            await api.patch(
+                `/interventions/${interventionSelectionnee.id}/`,
+                payload
+            );
+
+            const res = await api.get(
+                `/interventions/${interventionSelectionnee.id}/`
+            );
+
+            const interventionMiseAJour = {
+                ...interventionSelectionnee,
+                notes_technicien: res.data.notes_technicien,
+                duree_reelle: res.data.duree_reelle
+            };
+
+            setInterventionSelectionnee(interventionMiseAJour);
+            setInterventions(prev =>
+                prev.map(i =>
+                    i.id === interventionSelectionnee.id
+                        ? {
+                            ...i,
+                            notes_technicien: res.data.notes_technicien,
+                            duree_reelle: res.data.duree_reelle
+                          }
+                        : i
+                )
+            );
+
+            message.success('Notes sauvegardées !');
+            setModalNotes(false);
+            formNotes.resetFields();
+
+        } catch (error) {
+            const erreur = error.response?.data;
+            message.error(
+                erreur?.detail ||
+                JSON.stringify(erreur) ||
+                'Erreur sauvegarde'
+            );
+        } finally {
+            setSavingNotes(false);
         }
-
-        await api.patch(
-            `/interventions/` +
-            `${interventionSelectionnee.id}/`,
-            payload
-        );
-
-        // ✅ Recharger depuis le serveur
-        // pour avoir les données fraîches
-        const res = await api.get(
-            `/interventions/` +
-            `${interventionSelectionnee.id}/`
-        );
-
-        const interventionMiseAJour = {
-            ...interventionSelectionnee,
-            notes_technicien:
-                res.data.notes_technicien,
-            duree_reelle: res.data.duree_reelle
-        };
-
-        // ✅ Mettre à jour l'intervention
-        // sélectionnée
-        setInterventionSelectionnee(
-            interventionMiseAJour);
-
-        // ✅ Mettre à jour dans la liste
-        setInterventions(prev =>
-            prev.map(i =>
-                i.id === interventionSelectionnee.id
-                    ? {
-                        ...i,
-                        notes_technicien:
-                            res.data.notes_technicien,
-                        duree_reelle:
-                            res.data.duree_reelle
-                      }
-                    : i
-            )
-        );
-
-        message.success('Notes sauvegardées !');
-        setModalNotes(false);
-        formNotes.resetFields();
-
-    } catch (error) {
-        const erreur = error.response?.data;
-        message.error(
-            erreur?.detail ||
-            JSON.stringify(erreur) ||
-            'Erreur sauvegarde'
-        );
-    } finally {
-        setSavingNotes(false);
-    }
-};
+    };
 
     // ─── AJOUTER PIÈCE UTILISÉE ───
     const ajouterPiece = async (values) => {
@@ -200,7 +190,7 @@ const MesInterventions = () => {
             const res = await api.post(`/interventions/${id}/generer-rapport/`);
             setRapport(res.data);
             formRapport.setFieldsValue({ contenu: res.data.contenu });
-            message.success('Rapport généré !');
+            message.success('Rapport généré avec succès !');
         } catch (error) {
             message.error(
                 error.response?.data?.erreur || 'Erreur génération rapport'
@@ -210,51 +200,50 @@ const MesInterventions = () => {
         }
     };
 
-    // ─── MODIFIER RAPPORT ───
-    const modifierRapport = async (values) => {
+    // ─── ENREGISTRER RAPPORT (technicien) ───
+    // Sauvegarde sans valider — validation = responsable
+    const enregistrerRapport = async (values) => {
+        setSavingRapport(true);
         try {
+            const contenu = values?.contenu ||
+                            formRapport.getFieldValue('contenu');
+
             await api.patch(
                 `/rapports/${rapport.rapport_id}/`,
-                { contenu: values.contenu }
+                { contenu: contenu }
             );
-            message.success('Rapport modifié !');
-            setRapport({ ...rapport, contenu: values.contenu });
-        } catch (error) {
-            message.error('Erreur modification');
-        }
-    };
 
-    // ─── VALIDER RAPPORT ───
-    const validerRapport = async () => {
-        try {
-            await api.post(`/rapports/${rapport.rapport_id}/valider/`);
-            message.success('Rapport validé !');
+            message.success(
+                'Rapport enregistré ! En attente de validation par le responsable.'
+            );
             setDrawerRapport(false);
             setRapport(null);
             formRapport.resetFields();
             chargerInterventions();
         } catch (error) {
-            message.error('Erreur validation');
+            message.error('Erreur enregistrement rapport');
+        } finally {
+            setSavingRapport(false);
         }
     };
 
     // ─── OUVRIR MODAL PIÈCES ───
-   const ouvrirModalPieces = async (intervention) => {
-    // ✅ Recharger depuis le serveur
-    const res = await api.get(
-        `/interventions/${intervention.id}/`
-    );
-    const interventionFraiche = {
-        ...intervention,
-        notes_technicien:
-            res.data.notes_technicien,
-        duree_reelle: res.data.duree_reelle
+    const ouvrirModalPieces = async (intervention) => {
+        try {
+            const res = await api.get(`/interventions/${intervention.id}/`);
+            const interventionFraiche = {
+                ...intervention,
+                notes_technicien: res.data.notes_technicien,
+                duree_reelle: res.data.duree_reelle
+            };
+            setInterventionSelectionnee(interventionFraiche);
+        } catch (error) {
+            setInterventionSelectionnee(intervention);
+        }
+        await chargerPieces();
+        await chargerPiecesUtilisees(intervention.id);
+        setModalPieces(true);
     };
-    setInterventionSelectionnee(interventionFraiche);
-    await chargerPieces();
-    await chargerPiecesUtilisees(intervention.id);
-    setModalPieces(true);
-};
 
     // ─── OUVRIR MODAL STATUT ───
     const ouvrirModalStatut = async (intervention) => {
@@ -264,77 +253,60 @@ const MesInterventions = () => {
     };
 
     // ─── OUVRIR MODAL NOTES ───
-  const ouvrirModalNotes = async (intervention) => {
-    // ✅ Recharger depuis le serveur
-    // pour avoir les notes à jour
-    try {
-        const res = await api.get(
-            `/interventions/${intervention.id}/`
-        );
-        const interventionFraiche = {
-            ...intervention,
-            notes_technicien:
-                res.data.notes_technicien,
-            duree_reelle: res.data.duree_reelle
-        };
-        setInterventionSelectionnee(
-            interventionFraiche);
-        formNotes.setFieldsValue({
-            notes_technicien:
-                res.data.notes_technicien || '',
-            duree_reelle:
-                res.data.duree_reelle || null
-        });
-    } catch (error) {
-        setInterventionSelectionnee(intervention);
-        formNotes.setFieldsValue({
-            notes_technicien:
-                intervention.notes_technicien || '',
-            duree_reelle:
-                intervention.duree_reelle || null
-        });
-    }
-    setModalNotes(true);
-};
-
-    // ─── OUVRIR DRAWER RAPPORT ───
-   const ouvrirDrawerRapport = async (intervention) => {
-    setDrawerRapport(true);
-    setRapport(null);
-
-    // ✅ Recharger depuis le serveur
-    // pour avoir les notes à jour
-    try {
-        const res = await api.get(
-            `/interventions/${intervention.id}/`
-        );
-        // Mettre à jour avec les données fraîches
-        const interventionFraiche = {
-            ...intervention,
-            notes_technicien:
-                res.data.notes_technicien,
-            duree_reelle: res.data.duree_reelle
-        };
-        setInterventionSelectionnee(
-            interventionFraiche);
-
-        // Charger le rapport s'il existe
-        if (res.data.rapport) {
-            setRapport({
-                rapport_id: res.data.rapport.id,
-                contenu: res.data.rapport.contenu,
-                genere_par_ia:
-                    res.data.rapport.genere_par_ia,
-                valide: res.data.rapport.valide
+    const ouvrirModalNotes = async (intervention) => {
+        try {
+            const res = await api.get(`/interventions/${intervention.id}/`);
+            const interventionFraiche = {
+                ...intervention,
+                notes_technicien: res.data.notes_technicien,
+                duree_reelle: res.data.duree_reelle
+            };
+            setInterventionSelectionnee(interventionFraiche);
+            formNotes.setFieldsValue({
+                notes_technicien: res.data.notes_technicien || '',
+                duree_reelle: res.data.duree_reelle || null
             });
-            formRapport.setFieldsValue({
-                contenu: res.data.rapport.contenu
+        } catch (error) {
+            setInterventionSelectionnee(intervention);
+            formNotes.setFieldsValue({
+                notes_technicien: intervention.notes_technicien || '',
+                duree_reelle: intervention.duree_reelle || null
             });
         }
-    } catch (error) {
-        setInterventionSelectionnee(intervention);
-    }
-};
+        setModalNotes(true);
+    };
+
+    // ─── OUVRIR DRAWER RAPPORT ───
+    const ouvrirDrawerRapport = async (intervention) => {
+        setDrawerRapport(true);
+        setRapport(null);
+        formRapport.resetFields();
+
+        try {
+            const res = await api.get(`/interventions/${intervention.id}/`);
+            const interventionFraiche = {
+                ...intervention,
+                notes_technicien: res.data.notes_technicien,
+                duree_reelle: res.data.duree_reelle
+            };
+            setInterventionSelectionnee(interventionFraiche);
+
+            if (res.data.rapport) {
+                setRapport({
+                    rapport_id: res.data.rapport.id,
+                    contenu: res.data.rapport.contenu,
+                    genere_par_ia: res.data.rapport.genere_par_ia,
+                    valide: res.data.rapport.valide,
+                    date_validation: res.data.rapport.date_validation
+                });
+                formRapport.setFieldsValue({
+                    contenu: res.data.rapport.contenu
+                });
+            }
+        } catch (error) {
+            setInterventionSelectionnee(intervention);
+        }
+    };
 
     // ─── COULEURS ───
     const couleurStatut = {
@@ -563,7 +535,7 @@ const MesInterventions = () => {
                     <Form.Item
                         label="Nouveau statut"
                         name="statut"
-                        rules={[{ required: true, message: 'Choisissez' }]}
+                        rules={[{ required: true, message: 'Choisissez un statut' }]}
                     >
                         <Select placeholder="Choisir...">
                             {transitions.map(t => (
@@ -838,33 +810,47 @@ const MesInterventions = () => {
                     setRapport(null);
                     formRapport.resetFields();
                 }}
-                width={620}
+                width={640}
                 extra={
                     rapport?.valide ? (
                         <Tag color="success" icon={<CheckCircleOutlined />}>
-                            Validé
+                            Validé par responsable
+                        </Tag>
+                    ) : rapport ? (
+                        <Tag color="warning" icon={<ClockCircleOutlined />}>
+                            En attente validation
                         </Tag>
                     ) : null
                 }
             >
+                {/* ─── Alerte notes manquantes ─── */}
                 {!interventionSelectionnee?.notes_technicien && (
                     <Alert
-                        message="Notes manquantes"
-                        description="Saisissez d'abord vos notes techniques avant de générer un rapport."
+                        message="Notes techniques manquantes"
+                        description="Vous devez d'abord saisir vos notes techniques avant de générer un rapport."
                         type="warning"
                         showIcon
                         style={{ borderRadius: 8, marginBottom: 16 }}
                     />
                 )}
 
+                {/* ─── Étape 1 : Pas de rapport → bouton générer ─── */}
                 {!rapport && (
                     <div style={{ textAlign: 'center', padding: '40px 0' }}>
                         <RobotOutlined style={{
-                            fontSize: 48, color: '#FF8C00',
+                            fontSize: 52, color: '#FF8C00',
                             marginBottom: 16, display: 'block'
                         }} />
-                        <p style={{ color: '#666', marginBottom: 20 }}>
-                            Générez un rapport professionnel basé sur vos notes techniques
+                        <p style={{
+                            color: '#666',
+                            marginBottom: 8,
+                            fontSize: 15,
+                            fontWeight: 500
+                        }}>
+                            Générez un rapport professionnel
+                        </p>
+                        <p style={{ color: '#999', marginBottom: 24, fontSize: 13 }}>
+                            Basé sur vos notes techniques via l'IA Groq
                         </p>
                         <Button
                             type="primary"
@@ -878,7 +864,9 @@ const MesInterventions = () => {
                                 borderColor: '#FF8C00',
                                 borderRadius: 10,
                                 fontWeight: 600,
-                                height: 48
+                                height: 48,
+                                paddingLeft: 28,
+                                paddingRight: 28
                             }}
                         >
                             Générer avec IA
@@ -886,82 +874,151 @@ const MesInterventions = () => {
                     </div>
                 )}
 
+                {/* ─── Étape 2 : Rapport généré, pas encore validé ─── */}
                 {rapport && !rapport.valide && (
                     <div>
                         {rapport.genere_par_ia && (
                             <Alert
-                                message="Rapport généré par IA"
-                                description="Vérifiez et modifiez si nécessaire avant de valider."
+                                message="✨ Rapport généré par IA (Groq)"
+                                description="Vérifiez et modifiez le contenu si nécessaire, puis enregistrez. Le responsable devra valider ce rapport."
                                 type="info"
                                 showIcon
                                 style={{ borderRadius: 8, marginBottom: 16 }}
                             />
                         )}
-                        <Form form={formRapport} layout="vertical" onFinish={modifierRapport}>
+
+                        <Form
+                            form={formRapport}
+                            layout="vertical"
+                            onFinish={enregistrerRapport}
+                        >
                             <Form.Item
-                                label={<span style={{ fontWeight: 600 }}>Contenu du rapport</span>}
+                                label={
+                                    <span style={{ fontWeight: 600 }}>
+                                        Contenu du rapport
+                                    </span>
+                                }
                                 name="contenu"
                             >
                                 <Input.TextArea
-                                    rows={14}
+                                    rows={15}
                                     style={{
                                         borderRadius: 8,
                                         fontFamily: 'monospace',
-                                        fontSize: 13
+                                        fontSize: 13,
+                                        lineHeight: 1.6
                                     }}
                                 />
                             </Form.Item>
-                            <div style={{ display: 'flex', gap: 12 }}>
+
+                            {/* ─── BOUTONS ─── */}
+                            <div style={{
+                                display: 'flex',
+                                gap: 12,
+                                alignItems: 'center',
+                                flexWrap: 'wrap'
+                            }}>
+                                {/* Regénérer avec IA */}
                                 <Button
-                                    onClick={() => genererRapport(interventionSelectionnee?.id)}
+                                    onClick={() =>
+                                        genererRapport(interventionSelectionnee?.id)
+                                    }
                                     loading={loadingRapport}
                                     icon={<RobotOutlined />}
+                                    style={{ borderRadius: 8 }}
                                 >
                                     Regénérer
                                 </Button>
-                                <Button
-                                    htmlType="submit"
-                                    icon={<EditOutlined />}
-                                    style={{ borderRadius: 8 }}
-                                >
-                                    Sauvegarder
-                                </Button>
+
+                                {/* ✅ Enregistrer dans Mes Rapports */}
                                 <Button
                                     type="primary"
-                                    icon={<CheckCircleOutlined />}
-                                    onClick={validerRapport}
+                                    htmlType="submit"
+                                    icon={<SaveOutlined />}
+                                    loading={savingRapport}
                                     style={{
-                                        background: '#52c41a',
-                                        borderColor: '#52c41a',
+                                        background: '#FF8C00',
+                                        borderColor: '#FF8C00',
                                         borderRadius: 8,
-                                        fontWeight: 600,
-                                        marginLeft: 'auto'
+                                        fontWeight: 700,
+                                        marginLeft: 'auto',
+                                        height: 40,
+                                        paddingLeft: 20,
+                                        paddingRight: 20
                                     }}
                                 >
-                                    Valider le rapport
+                                    Enregistrer le rapport
                                 </Button>
                             </div>
                         </Form>
+
+                        {/* Info : en attente validation responsable */}
+                        <div style={{
+                            marginTop: 16,
+                            padding: '12px 16px',
+                            background: '#fffbe6',
+                            border: '1px solid #ffe58f',
+                            borderRadius: 10,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 10
+                        }}>
+                            <ClockCircleOutlined style={{
+                                color: '#faad14', fontSize: 16, marginTop: 2
+                            }} />
+                            <div>
+                                <div style={{
+                                    fontWeight: 600,
+                                    fontSize: 13,
+                                    color: '#664d00',
+                                    marginBottom: 4
+                                }}>
+                                    En attente de validation
+                                </div>
+                                <div style={{ fontSize: 12, color: '#856404' }}>
+                                    Après enregistrement, votre rapport sera visible
+                                    dans <strong>Mes Rapports</strong> et soumis
+                                    au responsable pour validation.
+                                    Vous ne pouvez pas valider vous-même votre propre rapport.
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
 
+                {/* ─── Étape 3 : Rapport validé par le responsable ─── */}
                 {rapport?.valide && (
                     <div>
                         <Alert
-                            message="Rapport validé ✅"
-                            description="Ce rapport a été validé et soumis au responsable."
+                            message="✅ Rapport validé par le responsable"
+                            description={
+                                rapport.date_validation
+                                    ? `Validé le ${new Date(rapport.date_validation)
+                                        .toLocaleDateString('fr-FR', {
+                                            weekday: 'long',
+                                            year: 'numeric',
+                                            month: 'long',
+                                            day: 'numeric'
+                                        })}`
+                                    : "Ce rapport a été examiné et approuvé."
+                            }
                             type="success"
                             showIcon
+                            icon={<CheckCircleOutlined />}
                             style={{ borderRadius: 8, marginBottom: 16 }}
                         />
+
+                        {/* Contenu du rapport validé */}
                         <div style={{
-                            padding: 16,
+                            padding: 20,
                             background: '#f8f9fa',
-                            borderRadius: 8,
+                            borderRadius: 10,
+                            border: '1px solid #e8e8e8',
                             fontFamily: 'monospace',
                             fontSize: 13,
                             whiteSpace: 'pre-wrap',
-                            lineHeight: 1.6
+                            lineHeight: 1.8,
+                            color: '#333'
                         }}>
                             {rapport.contenu}
                         </div>

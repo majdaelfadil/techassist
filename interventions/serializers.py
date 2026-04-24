@@ -111,6 +111,57 @@ class DiagnosticIASerializer(
 
 # ─── RAPPORT ───
 class RapportSerializer(serializers.ModelSerializer):
+    # ─── Champs de l'intervention ───
+    intervention_numero = serializers.CharField(
+        source='intervention.numero',
+        read_only=True
+    )
+    intervention_statut = serializers.CharField(
+        source='intervention.statut',
+        read_only=True
+    )
+    intervention_id = serializers.IntegerField(
+        source='intervention.id',
+        read_only=True
+    )
+    type_service = serializers.CharField(
+        source='intervention.type_service',
+        read_only=True
+    )
+
+    # ─── Champs du client ───
+    client_nom = serializers.CharField(
+        source='intervention.client.nom',
+        read_only=True
+    )
+    intervention_client_nom = serializers.CharField(
+        source='intervention.client.nom',
+        read_only=True
+    )
+
+    # ─── Champs du technicien ───
+    technicien_nom = serializers.CharField(
+        source='intervention.technicien.nom',
+        read_only=True
+    )
+    technicien_id = serializers.IntegerField(
+        source='intervention.technicien.id',
+        read_only=True
+    )
+
+    # ─── Notes du technicien ───
+    notes_technicien = serializers.CharField(
+        source='intervention.notes_technicien',
+        read_only=True
+    )
+
+    # ─── Date generation renommée en cree_le ───
+    # pour compatibilité avec Rapports.jsx
+    cree_le = serializers.DateTimeField(
+        source='date_generation',
+        read_only=True
+    )
+
     class Meta:
         model = Rapport
         fields = '__all__'
