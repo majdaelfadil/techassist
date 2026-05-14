@@ -26,7 +26,6 @@ const ProtectedRoute = ({ children, roles }) => {
     }
     return <AppLayout>{children}</AppLayout>;
 };
-
 function App() {
     return (
         <BrowserRouter>

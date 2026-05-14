@@ -40,7 +40,7 @@ urlpatterns = [
     path('interventions/<int:pk>/valider/',
          views.InterventionValiderView.as_view()),
 
-    # ⭐ NOUVELLE ROUTE : Valider et générer la facture ⭐
+    #  NOUVELLE ROUTE : Valider et générer la facture 
     path('interventions/<int:pk>/valider-generer-facture/',
          views.InterventionValiderGenererFactureView.as_view(),
          name='intervention-valider-generer-facture'),
@@ -95,4 +95,10 @@ urlpatterns = [
     path('techniciens/verifier-disponibilite/',
          views.VerifierDisponibiliteView.as_view(),
          name='verifier-disponibilite'),
+
+     path('diagnostic/ia/',
+     views.DiagnosticIAView.as_view(),
+     name='diagnostic-ia'),
+    
+     
 ]

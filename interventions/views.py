@@ -1423,3 +1423,43 @@ class ListePiecesUtiliseesView(APIView):
             'pieces': serializer.data,
             'total_pieces': str(total)
         })
+    # ─── DIAGNOSTIC IA ───
+class DiagnosticIAView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        description = request.data.get(
+            'description', '').strip()
+
+        if len(description) < 10:
+            return Response({
+                'erreur': 'Description trop courte'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        techniciens = list(
+            Technicien.objects
+            .filter(disponible=True)
+            .values('id', 'nom', 'specialite',
+                    'disponible', 'tarif_horaire')
+        )
+
+        try:
+            from ml.predictor import predire
+            resultat = predire(description, techniciens)
+
+            if 'erreur' in resultat:
+                return Response(
+                    {'erreur': resultat['erreur']},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+
+            return Response(
+                resultat,
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response(
+                {'erreur': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
