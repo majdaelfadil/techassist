@@ -14,6 +14,7 @@ import {
     ThunderboltOutlined, UserOutlined, ArrowRightOutlined
 } from '@ant-design/icons';
 import api from '../services/api';
+import GestionImages from '../components/GestionImages';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -1512,6 +1513,13 @@ const Interventions = () => {
                                 ))}
                             </>
                         )}
+
+                        <Divider>Photos</Divider>
+                        <GestionImages
+                            interventionId={interventionSelectionnee?.id}
+                            interventionNumero={interventionSelectionnee?.numero}
+                            readOnly={true}
+                        />
                     </div>
                 )}
             </Drawer>

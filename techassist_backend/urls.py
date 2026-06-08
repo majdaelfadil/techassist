@@ -4,6 +4,7 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+from django.conf import settings
 
 urlpatterns = [
     # ── Admin Django ──
@@ -17,4 +18,6 @@ urlpatterns = [
 
     # ── APIs du projet ──
     path('api/', include('interventions.urls')),
+
+
 ]

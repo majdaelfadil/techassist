@@ -3,7 +3,8 @@ import {
     Table, Card, Button, Tag, Space, message,
     Modal, Form, Input, Drawer, Descriptions,
     Divider, Alert, Tooltip, Select,
-    InputNumber, List, Popconfirm
+    InputNumber, List, Popconfirm, Upload,
+    Badge, Spin
 } from 'antd';
 import {
     EyeOutlined, SwapOutlined, EditOutlined,
@@ -11,11 +12,14 @@ import {
     ReloadOutlined, RobotOutlined,
     PlusOutlined, DeleteOutlined,
     AppstoreOutlined, SaveOutlined,
-    ClockCircleOutlined
+    ClockCircleOutlined, CameraOutlined,
+    PictureOutlined, UploadOutlined,
+    CheckOutlined
 } from '@ant-design/icons';
 import api from '../services/api';
 
 const { Option } = Select;
+const { TextArea } = Input;
 
 const MesInterventions = () => {
     const [interventions, setInterventions] = useState([]);
@@ -38,6 +42,16 @@ const MesInterventions = () => {
     const [formRapport] = Form.useForm();
     const [formPiece] = Form.useForm();
 
+    // États pour l'upload d'image
+    const [modalAjoutImage, setModalAjoutImage] = useState(false);
+    const [imageFile, setImageFile] = useState(null);
+    const [imageType, setImageType] = useState('autre');
+    const [imageDescription, setImageDescription] = useState('');
+    const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
+    const [uploadingImage, setUploadingImage] = useState(false);
+    const [imagesList, setImagesList] = useState([]);
+    const [loadingImages, setLoadingImages] = useState(false);
+
     useEffect(() => {
         chargerInterventions();
     }, []);
@@ -52,6 +66,19 @@ const MesInterventions = () => {
             message.error('Erreur chargement');
         } finally {
             setLoading(false);
+        }
+    };
+
+    // ─── CHARGER IMAGES ───
+    const chargerImages = async (interventionId) => {
+        setLoadingImages(true);
+        try {
+            const res = await api.get(`/interventions/${interventionId}/images/`);
+            setImagesList(res.data.images || []);
+        } catch (error) {
+            console.error('Erreur chargement images:', error);
+        } finally {
+            setLoadingImages(false);
         }
     };
 
@@ -201,7 +228,6 @@ const MesInterventions = () => {
     };
 
     // ─── ENREGISTRER RAPPORT (technicien) ───
-    // Sauvegarde sans valider — validation = responsable
     const enregistrerRapport = async (values) => {
         setSavingRapport(true);
         try {
@@ -224,6 +250,77 @@ const MesInterventions = () => {
             message.error('Erreur enregistrement rapport');
         } finally {
             setSavingRapport(false);
+        }
+    };
+
+    // ─── AJOUTER IMAGE ───
+    const handleSelectImage = (file) => {
+        const isImage = file.type.startsWith('image/');
+        if (!isImage) {
+            message.error('Veuillez sélectionner une image');
+            return false;
+        }
+
+        const isLt5M = file.size / 1024 / 1024 < 5;
+        if (!isLt5M) {
+            message.error('L\'image doit faire moins de 5 Mo');
+            return false;
+        }
+
+        setImageFile(file);
+        const previewUrl = URL.createObjectURL(file);
+        setImagePreviewUrl(previewUrl);
+        return false;
+    };
+
+    const handleUploadImage = async () => {
+        if (!imageFile) {
+            message.warning('Veuillez sélectionner une image');
+            return;
+        }
+
+        setUploadingImage(true);
+        try {
+            const formData = new FormData();
+            formData.append('image', imageFile);
+            formData.append('type_image', imageType);
+            formData.append('description', imageDescription);
+
+            await api.post(
+                `/interventions/${interventionSelectionnee.id}/ajouter-image/`,
+                formData,
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    }
+                }
+            );
+
+            message.success('Image ajoutée avec succès !');
+            resetImageModal();
+            chargerImages(interventionSelectionnee.id);
+        } catch (error) {
+            message.error(error.response?.data?.erreur || 'Erreur lors de l\'upload');
+        } finally {
+            setUploadingImage(false);
+        }
+    };
+
+    const resetImageModal = () => {
+        setModalAjoutImage(false);
+        setImageFile(null);
+        setImagePreviewUrl(null);
+        setImageType('autre');
+        setImageDescription('');
+    };
+
+    const supprimerImage = async (imageId) => {
+        try {
+            await api.delete(`/images/${imageId}/supprimer/`);
+            message.success('Image supprimée');
+            chargerImages(interventionSelectionnee.id);
+        } catch (error) {
+            message.error('Erreur suppression');
         }
     };
 
@@ -308,6 +405,23 @@ const MesInterventions = () => {
         }
     };
 
+    // ─── OUVRIR MODAL AJOUT IMAGE ───
+    const ouvrirModalAjoutImage = async (intervention) => {
+        setInterventionSelectionnee(intervention);
+        await chargerImages(intervention.id);
+        setModalAjoutImage(true);
+    };
+
+    // Types d'images
+    const typesImages = {
+        'avant': { label: 'Avant intervention', color: '#1890ff' },
+        'apres': { label: 'Après intervention', color: '#52c41a' },
+        'panne': { label: 'Photo de la panne', color: '#f5222d' },
+        'piece': { label: 'Pièce de rechange', color: '#fa8c16' },
+        'document': { label: 'Document', color: '#722ed1' },
+        'autre': { label: 'Autre', color: '#8c8c8c' },
+    };
+
     // ─── COULEURS ───
     const couleurStatut = {
         'nouveau':        '#1890ff',
@@ -329,7 +443,7 @@ const MesInterventions = () => {
         'depannage':     'Dépannage'
     };
 
-    // ─── COLONNES ───
+    // ─── COLONNES AVEC BOUTON PHOTO ───
     const colonnes = [
         {
             title: 'Numéro',
@@ -406,7 +520,7 @@ const MesInterventions = () => {
         },
         {
             title: 'Actions',
-            width: 220,
+            width: 280,
             render: (_, record) => (
                 <Space>
                     <Tooltip title="Voir détail">
@@ -418,6 +532,15 @@ const MesInterventions = () => {
                                 setInterventionSelectionnee(record);
                                 setDrawerDetail(true);
                             }}
+                        />
+                    </Tooltip>
+                    {/* 🔵 BOUTON PHOTO DANS LES ACTIONS */}
+                    <Tooltip title="Gérer les photos">
+                        <Button
+                            type="text"
+                            icon={<CameraOutlined />}
+                            style={{ color: '#1616fa' }}
+                            onClick={() => ouvrirModalAjoutImage(record)}
                         />
                     </Tooltip>
                     <Tooltip title="Changer statut">
@@ -823,7 +946,6 @@ const MesInterventions = () => {
                     ) : null
                 }
             >
-                {/* ─── Alerte notes manquantes ─── */}
                 {!interventionSelectionnee?.notes_technicien && (
                     <Alert
                         message="Notes techniques manquantes"
@@ -834,7 +956,6 @@ const MesInterventions = () => {
                     />
                 )}
 
-                {/* ─── Étape 1 : Pas de rapport → bouton générer ─── */}
                 {!rapport && (
                     <div style={{ textAlign: 'center', padding: '40px 0' }}>
                         <RobotOutlined style={{
@@ -874,7 +995,6 @@ const MesInterventions = () => {
                     </div>
                 )}
 
-                {/* ─── Étape 2 : Rapport généré, pas encore validé ─── */}
                 {rapport && !rapport.valide && (
                     <div>
                         {rapport.genere_par_ia && (
@@ -911,14 +1031,12 @@ const MesInterventions = () => {
                                 />
                             </Form.Item>
 
-                            {/* ─── BOUTONS ─── */}
                             <div style={{
                                 display: 'flex',
                                 gap: 12,
                                 alignItems: 'center',
                                 flexWrap: 'wrap'
                             }}>
-                                {/* Regénérer avec IA */}
                                 <Button
                                     onClick={() =>
                                         genererRapport(interventionSelectionnee?.id)
@@ -930,7 +1048,6 @@ const MesInterventions = () => {
                                     Regénérer
                                 </Button>
 
-                                {/* ✅ Enregistrer dans Mes Rapports */}
                                 <Button
                                     type="primary"
                                     htmlType="submit"
@@ -952,7 +1069,6 @@ const MesInterventions = () => {
                             </div>
                         </Form>
 
-                        {/* Info : en attente validation responsable */}
                         <div style={{
                             marginTop: 16,
                             padding: '12px 16px',
@@ -986,7 +1102,6 @@ const MesInterventions = () => {
                     </div>
                 )}
 
-                {/* ─── Étape 3 : Rapport validé par le responsable ─── */}
                 {rapport?.valide && (
                     <div>
                         <Alert
@@ -1008,7 +1123,6 @@ const MesInterventions = () => {
                             style={{ borderRadius: 8, marginBottom: 16 }}
                         />
 
-                        {/* Contenu du rapport validé */}
                         <div style={{
                             padding: 20,
                             background: '#f8f9fa',
@@ -1034,53 +1148,270 @@ const MesInterventions = () => {
                 width={480}
             >
                 {interventionSelectionnee && (
-                    <Descriptions column={1} bordered size="small">
-                        <Descriptions.Item label="Numéro">
-                            <span style={{ color: '#FF8C00', fontWeight: 700 }}>
-                                {interventionSelectionnee.numero}
-                            </span>
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Client">
-                            {interventionSelectionnee.client_nom}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Appareil">
-                            {interventionSelectionnee.appareil_info || 'N/A'}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Type">
-                            {typesService[interventionSelectionnee.type_service]}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Statut">
-                            <Tag color={couleurStatut[interventionSelectionnee.statut]}>
-                                {interventionSelectionnee.statut?.toUpperCase()}
-                            </Tag>
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Urgence">
-                            {interventionSelectionnee.urgence?.toUpperCase()}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Date planifiée">
-                            {interventionSelectionnee.date_planifiee
-                                ? new Date(interventionSelectionnee.date_planifiee)
-                                    .toLocaleDateString('fr-FR')
-                                : 'Non planifiée'}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Durée estimée">
-                            {interventionSelectionnee.duree_estimee
-                                ? `${interventionSelectionnee.duree_estimee}h`
-                                : 'N/A'}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Notes technicien">
-                            {interventionSelectionnee.notes_technicien || (
-                                <span style={{ color: '#ccc' }}>Aucune note</span>
-                            )}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Durée réelle">
-                            {interventionSelectionnee.duree_reelle
-                                ? `${interventionSelectionnee.duree_reelle}h`
-                                : <span style={{ color: '#ccc' }}>N/A</span>}
-                        </Descriptions.Item>
-                    </Descriptions>
+                    <>
+                        <Descriptions column={1} bordered size="small">
+                            <Descriptions.Item label="Numéro">
+                                <span style={{ color: '#FF8C00', fontWeight: 700 }}>
+                                    {interventionSelectionnee.numero}
+                                </span>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Client">
+                                {interventionSelectionnee.client_nom}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Appareil">
+                                {interventionSelectionnee.appareil_info || 'N/A'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Type">
+                                {typesService[interventionSelectionnee.type_service]}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Statut">
+                                <Tag color={couleurStatut[interventionSelectionnee.statut]}>
+                                    {interventionSelectionnee.statut?.toUpperCase()}
+                                </Tag>
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Urgence">
+                                {interventionSelectionnee.urgence?.toUpperCase()}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Date planifiée">
+                                {interventionSelectionnee.date_planifiee
+                                    ? new Date(interventionSelectionnee.date_planifiee)
+                                        .toLocaleDateString('fr-FR')
+                                    : 'Non planifiée'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Durée estimée">
+                                {interventionSelectionnee.duree_estimee
+                                    ? `${interventionSelectionnee.duree_estimee}h`
+                                    : 'N/A'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Notes technicien">
+                                {interventionSelectionnee.notes_technicien || (
+                                    <span style={{ color: '#ccc' }}>Aucune note</span>
+                                )}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Durée réelle">
+                                {interventionSelectionnee.duree_reelle
+                                    ? `${interventionSelectionnee.duree_reelle}h`
+                                    : <span style={{ color: '#ccc' }}>N/A</span>}
+                            </Descriptions.Item>
+                        </Descriptions>
+                    </>
                 )}
             </Drawer>
+
+            {/* ─── MODAL AJOUT IMAGE ─── */}
+            <Modal
+                title={
+                    <span style={{ fontWeight: 700 }}>
+                        <CameraOutlined style={{ marginRight: 8, color: '#FF8C00' }} />
+                        Gérer les photos - {interventionSelectionnee?.numero}
+                    </span>
+                }
+                open={modalAjoutImage}
+                onCancel={resetImageModal}
+                footer={null}
+                width={600}
+            >
+                <div style={{ marginTop: 16 }}>
+                    {/* Formulaire d'ajout */}
+                    <Card size="small" title="Ajouter une photo" style={{ marginBottom: 16 }}>
+                        <div style={{ marginBottom: 12 }}>
+                            <label style={{ fontWeight: 600, fontSize: 13, display: 'block', marginBottom: 6 }}>
+                                Type de photo
+                            </label>
+                            <Select
+                                value={imageType}
+                                onChange={setImageType}
+                                style={{ width: '100%' }}
+                            >
+                                {Object.entries(typesImages).map(([k, v]) => (
+                                    <Option key={k} value={k}>
+                                        <Tag color={v.color} style={{ marginRight: 8 }}>{v.label}</Tag>
+                                    </Option>
+                                ))}
+                            </Select>
+                        </div>
+
+                        <div style={{ marginBottom: 12 }}>
+                            <label style={{ fontWeight: 600, fontSize: 13, display: 'block', marginBottom: 6 }}>
+                                Description <span style={{ color: '#999', fontWeight: 400 }}>(optionnel)</span>
+                            </label>
+                            <Input.TextArea
+                                rows={2}
+                                placeholder="Décrivez cette photo..."
+                                value={imageDescription}
+                                onChange={(e) => setImageDescription(e.target.value)}
+                                style={{ borderRadius: 8 }}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: 12 }}>
+                            <label style={{ fontWeight: 600, fontSize: 13, display: 'block', marginBottom: 6 }}>
+                                Photo
+                            </label>
+                            <Upload.Dragger
+                                beforeUpload={handleSelectImage}
+                                showUploadList={false}
+                                accept="image/jpeg,image/jpg,image/png,image/webp"
+                            >
+                                {imagePreviewUrl ? (
+                                    <div>
+                                        <img 
+                                            src={imagePreviewUrl} 
+                                            alt="Aperçu" 
+                                            style={{ maxHeight: 150, maxWidth: '100%', borderRadius: 8 }}
+                                        />
+                                        <div style={{ marginTop: 8, color: '#52c41a' }}>
+                                            <CheckOutlined /> Image sélectionnée
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <UploadOutlined style={{ fontSize: 32, color: '#FF8C00' }} />
+                                        <div style={{ marginTop: 8 }}>Cliquez ou glissez une photo</div>
+                                        <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+                                            JPG, PNG, WEBP - Max 5 Mo
+                                        </div>
+                                    </div>
+                                )}
+                            </Upload.Dragger>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                            <Button onClick={resetImageModal}>Annuler</Button>
+                            <Button
+                                type="primary"
+                                icon={<CameraOutlined />}
+                                loading={uploadingImage}
+                                disabled={!imageFile}
+                                onClick={handleUploadImage}
+                                style={{
+                                    background: '#FF8C00',
+                                    borderColor: '#FF8C00',
+                                    borderRadius: 8,
+                                    fontWeight: 600
+                                }}
+                            >
+                                {uploadingImage ? 'Envoi...' : 'Ajouter'}
+                            </Button>
+                        </div>
+                    </Card>
+
+                    {/* Liste des photos existantes */}
+                    <Divider>Photos existantes ({imagesList.length})</Divider>
+                    
+                    {loadingImages ? (
+                        <div style={{ textAlign: 'center', padding: '40px' }}>
+                            <Spin />
+                        </div>
+                    ) : imagesList.length === 0 ? (
+                        <div style={{ 
+                            textAlign: 'center', 
+                            padding: '40px 20px',
+                            background: '#fafafa',
+                            borderRadius: 12
+                        }}>
+                            <CameraOutlined style={{ fontSize: 48, color: '#ccc' }} />
+                            <div style={{ color: '#999', marginTop: 8 }}>Aucune photo</div>
+                        </div>
+                    ) : (
+                        <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: 'repeat(2, 1fr)', 
+                            gap: 12,
+                            maxHeight: 400,
+                            overflowY: 'auto'
+                        }}>
+                            {imagesList.map((img) => (
+                                <div
+                                    key={img.id}
+                                    style={{
+                                        position: 'relative',
+                                        borderRadius: 10,
+                                        overflow: 'hidden',
+                                        border: '1px solid #f0f0f0',
+                                        background: '#f8f9fa'
+                                    }}
+                                >
+                                    <img
+                                        src={img.image_url}
+                                        alt={img.description || img.type_image}
+                                        style={{
+                                            width: '100%',
+                                            height: 120,
+                                            objectFit: 'cover',
+                                            cursor: 'pointer'
+                                        }}
+                                        onClick={() => {
+                                            Modal.info({
+                                                title: typesImages[img.type_image]?.label || img.type_image,
+                                                content: (
+                                                    <div>
+                                                        <img 
+                                                            src={img.image_url} 
+                                                            alt={img.description}
+                                                            style={{ width: '100%', borderRadius: 8 }}
+                                                        />
+                                                        {img.description && (
+                                                            <p style={{ marginTop: 12, color: '#666' }}>
+                                                                {img.description}
+                                                            </p>
+                                                        )}
+                                                        <p style={{ fontSize: 12, color: '#999', marginTop: 8 }}>
+                                                            Ajouté le {new Date(img.date_ajout).toLocaleDateString('fr-FR')}
+                                                        </p>
+                                                    </div>
+                                                ),
+                                                width: 500,
+                                                okText: 'Fermer'
+                                            });
+                                        }}
+                                    />
+                                    <div style={{
+                                        position: 'absolute',
+                                        bottom: 0,
+                                        left: 0,
+                                        right: 0,
+                                        background: 'rgba(0,0,0,0.6)',
+                                        padding: '4px 8px',
+                                        fontSize: 10,
+                                        color: '#fff'
+                                    }}>
+                                        <Tag 
+                                            color={typesImages[img.type_image]?.color || '#666'} 
+                                            style={{ fontSize: 10, margin: 0 }}
+                                        >
+                                            {typesImages[img.type_image]?.label || img.type_image}
+                                        </Tag>
+                                    </div>
+                                    <Button
+                                        type="text"
+                                        danger
+                                        icon={<DeleteOutlined />}
+                                        size="small"
+                                        style={{
+                                            position: 'absolute',
+                                            top: 4,
+                                            right: 4,
+                                            background: 'rgba(255,255,255,0.9)',
+                                            borderRadius: '50%'
+                                        }}
+                                        onClick={() => {
+                                            Modal.confirm({
+                                                title: 'Supprimer cette photo ?',
+                                                content: 'Cette action est irréversible.',
+                                                okText: 'Oui',
+                                                cancelText: 'Non',
+                                                okButtonProps: { danger: true },
+                                                onOk: () => supprimerImage(img.id)
+                                            });
+                                        }}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 };

@@ -1,5 +1,10 @@
 from django.db import models, transaction
 from django.contrib.auth.models import User
+from cloudinary.models import CloudinaryField
+
+
+def chemin_image_intervention(instance, filename):
+    return f"interventions/{filename}"
 
 # ─── CLIENT ───
 class Client(models.Model):
@@ -301,6 +306,60 @@ class Rapport(models.Model):
 
     def __str__(self):
         return f"Rapport - {self.intervention.numero}"
+
+class ImageIntervention(models.Model):
+ 
+    TYPE_CHOICES = [
+        ('avant',    'Avant intervention'),
+        ('apres',    'Après intervention'),
+        ('panne',    'Photo de la panne'),
+        ('piece',    'Photo de la pièce'),
+        ('document', 'Document'),
+        ('autre',    'Autre'),
+    ]
+ 
+    intervention = models.ForeignKey(
+        'Intervention',
+        on_delete=models.CASCADE,
+        related_name='images',
+        verbose_name='Intervention'
+    )
+ 
+    # ✅ CloudinaryField — stockage sur Cloudinary
+    image = CloudinaryField(
+        'image',
+        folder='techassist/interventions',
+        resource_type='image',
+        blank=True,
+        null=True,
+    )
+ 
+    type_image = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default='autre',
+        verbose_name='Type'
+    )
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name='Description'
+    )
+    date_ajout = models.DateTimeField(
+        auto_now_add=True
+    )
+ 
+    class Meta:
+        verbose_name = "Image d'intervention"
+        verbose_name_plural = "Images"
+        ordering = ['date_ajout']
+ 
+    def __str__(self):
+        return (
+            f"{self.get_type_image_display()}"
+            f" — {self.intervention.numero}"
+        )
 
 # ─── FACTURE ───
 class Facture(models.Model):

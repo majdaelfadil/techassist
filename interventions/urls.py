@@ -99,6 +99,18 @@ urlpatterns = [
      path('diagnostic/ia/',
      views.DiagnosticIAView.as_view(),
      name='diagnostic-ia'),
-    
+
+     # ── Images ──
+     path('interventions/<int:pk>/images/',
+          views.ListeImagesView.as_view(),
+          name='liste-images'),
      
+     path('interventions/<int:pk>/ajouter-image/',
+          views.AjouterImageView.as_view(),
+          name='ajouter-image'),
+     
+     path('images/<int:pk>/supprimer/',
+          views.SupprimerImageView.as_view(),
+          name='supprimer-image'),           
+          
 ]

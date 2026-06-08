@@ -222,3 +222,79 @@ class InterventionDetailSerializer(
     class Meta:
         model = Intervention
         fields = '__all__'
+
+class ImageInterventionSerializer(
+        serializers.ModelSerializer):
+
+    image_url = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+    type_image_display = serializers.CharField(
+        source='get_type_image_display',
+        read_only=True
+    )
+
+    class Meta:
+        from .models import ImageIntervention
+        model = ImageIntervention
+        fields = [
+            'id',
+            'intervention',
+            'image',
+            'image_url',
+            'thumbnail_url',
+            'type_image',
+            'type_image_display',
+            'description',
+            'date_ajout',
+        ]
+        read_only_fields = [
+            'image_url',
+            'thumbnail_url',
+            'type_image_display',
+            'date_ajout',
+        ]
+
+    def get_image_url(self, obj):
+        """
+        URL originale Cloudinary.
+        """
+        if not obj.image:
+            return None
+
+        try:
+            import cloudinary.utils
+
+            url, _ = cloudinary.utils.cloudinary_url(
+                str(obj.image),
+                secure=True
+            )
+
+            return url
+
+        except Exception:
+            return None
+
+    def get_thumbnail_url(self, obj):
+        """
+        URL miniature optimisée.
+        """
+        if not obj.image:
+            return None
+
+        try:
+            import cloudinary.utils
+
+            url, _ = cloudinary.utils.cloudinary_url(
+                str(obj.image),
+                width=300,
+                height=200,
+                crop='fill',
+                quality='auto',
+                fetch_format='auto',
+                secure=True
+            )
+
+            return url
+
+        except Exception:
+            return None

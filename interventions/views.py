@@ -26,6 +26,18 @@ from .email_service import (
     envoyer_notification_technicien,
     envoyer_facture_client)
 
+from .models import ImageIntervention
+from .serializers import ImageInterventionSerializer
+from rest_framework.parsers import (
+    MultiPartParser, FormParser)
+
+from rest_framework.parsers import (
+    MultiPartParser, FormParser)
+
+import traceback
+import cloudinary.uploader
+ 
+
 # ════════════════════════════════
 # ─── PERMISSIONS ───
 # ════════════════════════════════
@@ -1463,3 +1475,258 @@ class DiagnosticIAView(APIView):
                 {'erreur': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+# ════════════════════════════════════════
+# VUE 1 — Ajouter une image
+# ════════════════════════════════════════
+ 
+class AjouterImageView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [
+        MultiPartParser,
+        FormParser
+    ]
+ 
+    def post(self, request, pk):
+ 
+        # ─── 1. Vérifier intervention ───
+        try:
+            intervention = \
+                Intervention.objects.get(pk=pk)
+        except Intervention.DoesNotExist:
+            return Response(
+                {'erreur':
+                     'Intervention non trouvée'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+        # ─── 2. Vérifier accès technicien ───
+        user = request.user
+        if (hasattr(user, 'profil') and
+                user.profil.role == 'technicien'):
+            try:
+                tech = Technicien.objects.get(
+                    user=user)
+                if intervention.technicien != tech:
+                    return Response(
+                        {'erreur': 'Accès refusé'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except Technicien.DoesNotExist:
+                return Response(
+                    {'erreur':
+                         'Profil introuvable'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+ 
+        # ─── 3. Vérifier fichier ───
+        if 'image' not in request.FILES:
+            return Response({
+                'erreur':
+                    'Champ "image" manquant',
+                'champs_recus':
+                    list(request.FILES.keys())
+            }, status=status.HTTP_400_BAD_REQUEST)
+ 
+        fichier = request.FILES['image']
+ 
+        # ─── 4. Vérifier type MIME ───
+        ct = fichier.content_type.lower()
+        if not any(t in ct for t in
+                   ['jpeg', 'jpg',
+                    'png', 'webp']):
+            return Response({
+                'erreur':
+                    f'Format non autorisé : {ct}'
+                    f'. Utilisez JPG, PNG ou WEBP'
+            }, status=status.HTTP_400_BAD_REQUEST)
+ 
+        # ─── 5. Vérifier taille (5 Mo) ───
+        if fichier.size > 5 * 1024 * 1024:
+            taille = round(
+                fichier.size / 1024 / 1024, 2)
+            return Response({
+                'erreur':
+                    f'Image trop grande '
+                    f'({taille} Mo). Max : 5 Mo'
+            }, status=status.HTTP_400_BAD_REQUEST)
+ 
+        # ─── 6. Upload sur Cloudinary ───
+        try:
+            dossier = (
+                f"techassist/interventions/"
+                f"{intervention.id}"
+            )
+ 
+            upload_result = (
+                cloudinary.uploader.upload(
+                    fichier,
+                    folder=dossier,
+                    resource_type='image',
+                )
+            )
+ 
+            public_id = upload_result['public_id']
+ 
+        except Exception as e:
+            print("Erreur Cloudinary :")
+            print(traceback.format_exc())
+            return Response({
+                'erreur':
+                    f'Erreur Cloudinary : '
+                    f'{str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
+        # ─── 7. Sauvegarder en base ───
+        try:
+            from .models import ImageIntervention
+            from .serializers import (
+                ImageInterventionSerializer)
+ 
+            image_obj = \
+                ImageIntervention.objects.create(
+                    intervention=intervention,
+                    image=public_id,
+                    type_image=request.data.get(
+                        'type_image', 'autre'),
+                    description=request.data.get(
+                        'description', '')
+                )
+ 
+            return Response({
+                'message': 'Image ajoutée !',
+                'image':
+                    ImageInterventionSerializer(
+                        image_obj,
+                        context={
+                            'request': request
+                        }
+                    ).data
+            }, status=status.HTTP_201_CREATED)
+ 
+        except Exception as e:
+            print("Erreur sauvegarde :")
+            print(traceback.format_exc())
+            return Response({
+                'erreur':
+                    f'Erreur sauvegarde : '
+                    f'{str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
+ 
+# ════════════════════════════════════════
+# VUE 2 — Lister les images
+# ════════════════════════════════════════
+ 
+class ListeImagesView(APIView):
+    permission_classes = [IsAuthenticated]
+ 
+    def get(self, request, pk):
+ 
+        try:
+            intervention = \
+                Intervention.objects.get(pk=pk)
+        except Intervention.DoesNotExist:
+            return Response(
+                {'erreur':
+                     'Intervention non trouvée'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+        # Vérifier accès technicien
+        user = request.user
+        if (hasattr(user, 'profil') and
+                user.profil.role == 'technicien'):
+            try:
+                tech = Technicien.objects.get(
+                    user=user)
+                if intervention.technicien != tech:
+                    return Response(
+                        {'erreur': 'Accès refusé'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except Technicien.DoesNotExist:
+                return Response(
+                    {'erreur': 'Accès refusé'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+ 
+        from .models import ImageIntervention
+        from .serializers import (
+            ImageInterventionSerializer)
+ 
+        images = ImageIntervention.objects.filter(
+            intervention=intervention
+        ).order_by('type_image', 'date_ajout')
+ 
+        return Response({
+            'intervention':
+                intervention.numero,
+            'nb_images':
+                images.count(),
+            'images':
+                ImageInterventionSerializer(
+                    images,
+                    many=True,
+                    context={'request': request}
+                ).data
+        })
+ 
+ 
+# ════════════════════════════════════════
+# VUE 3 — Supprimer une image
+# ════════════════════════════════════════
+ 
+class SupprimerImageView(APIView):
+    permission_classes = [IsAuthenticated]
+ 
+    def delete(self, request, pk):
+ 
+        from .models import ImageIntervention
+ 
+        try:
+            image = \
+                ImageIntervention.objects.get(
+                    pk=pk)
+        except ImageIntervention.DoesNotExist:
+            return Response(
+                {'erreur': 'Image non trouvée'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+        # Vérifier accès technicien
+        user = request.user
+        if (hasattr(user, 'profil') and
+                user.profil.role == 'technicien'):
+            try:
+                tech = Technicien.objects.get(
+                    user=user)
+                if (image.intervention.technicien
+                        != tech):
+                    return Response(
+                        {'erreur': 'Accès refusé'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except Technicien.DoesNotExist:
+                return Response(
+                    {'erreur': 'Accès refusé'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+ 
+        # Supprimer sur Cloudinary
+        try:
+            if image.image:
+                cloudinary.uploader.destroy(
+                    str(image.image),
+                    resource_type='image'
+                )
+        except Exception as e:
+            print(f"Erreur Cloudinary destroy: {e}")
+ 
+        # Supprimer en base
+        image.delete()
+ 
+        return Response({
+            'message':
+                'Image supprimée de Cloudinary'
+        }, status=status.HTTP_200_OK)

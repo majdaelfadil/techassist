@@ -1,56 +1,76 @@
+// frontend/src/services/api.js
+
 import axios from 'axios';
 
-const API_URL = 'http://127.0.0.1:8000/api';
-
-// ─── INSTANCE AXIOS ───
 const api = axios.create({
-    baseURL: API_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
+    baseURL: 'http://localhost:8000/api',
 });
 
-// ─── INTERCEPTEUR REQUEST ───
-// Ajoute automatiquement le token JWT à chaque requête
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('access_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => Promise.reject(error)
-);
+// ─── Intercepteur requête ───
+api.interceptors.request.use((config) => {
 
-// ─── INTERCEPTEUR RESPONSE ───
-// Gère automatiquement le refresh du token
+    // Ajouter token JWT
+    const token = localStorage.getItem(
+        'access_token');
+    if (token) {
+        config.headers['Authorization'] =
+            `Bearer ${token}`;
+    }
+
+    // ✅ Pour FormData (upload images) :
+    // Supprimer Content-Type pour qu'Axios
+    // génère automatiquement le bon boundary
+    if (config.data instanceof FormData) {
+        delete config.headers['Content-Type'];
+    }
+
+    return config;
+});
+
+// ─── Intercepteur réponse ───
 api.interceptors.response.use(
     (response) => response,
+
     async (error) => {
-        const originalRequest = error.config;
+        const original = error.config;
+
         if (error.response?.status === 401 &&
-            !originalRequest._retry) {
-            originalRequest._retry = true;
+            !original._retry) {
+            original._retry = true;
+
             try {
-                const refresh = localStorage.getItem(
-                    'refresh_token');
-                const response = await axios.post(
-                    `${API_URL}/auth/refresh/`,
+                const refresh =
+                    localStorage.getItem(
+                        'refresh_token');
+
+                const res = await axios.post(
+                    'http://localhost:8000/api'
+                    + '/auth/refresh/',
                     { refresh }
                 );
+
+                const newAccess = res.data.access;
                 localStorage.setItem(
-                    'access_token',
-                    response.data.access
-                );
-                originalRequest.headers.Authorization =
-                    `Bearer ${response.data.access}`;
-                return api(originalRequest);
-            } catch (e) {
+                    'access_token', newAccess);
+
+                original.headers['Authorization'] =
+                    `Bearer ${newAccess}`;
+
+                // ✅ FormData intact après refresh
+                if (original.data instanceof
+                        FormData) {
+                    delete original.headers[
+                        'Content-Type'];
+                }
+
+                return api(original);
+
+            } catch {
                 localStorage.clear();
                 window.location.href = '/login';
             }
         }
+
         return Promise.reject(error);
     }
 );

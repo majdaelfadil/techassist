@@ -3,6 +3,7 @@ from .models import (Client, Technicien, Agent,
                      ProfilUtilisateur, Appareil,
                      Piece, Intervention, PieceUtilisee,
                      DiagnosticIA, Rapport, Facture)
+from .models import ImageIntervention
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
@@ -70,3 +71,15 @@ class RapportAdmin(admin.ModelAdmin):
 class DiagnosticIAAdmin(admin.ModelAdmin):
     list_display = ['intervention', 'categorie_panne',
                     'complexite', 'duree_estimee']
+    
+
+@admin.register(ImageIntervention)
+class ImageInterventionAdmin(admin.ModelAdmin):
+    list_display = [
+        'intervention',
+        'type_image',
+        'description',
+        'date_ajout'
+    ]
+    list_filter = ['type_image']
+    readonly_fields = ['date_ajout']
