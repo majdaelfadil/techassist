@@ -7,7 +7,7 @@ import {
     AppstoreOutlined, FileTextOutlined,
     LogoutOutlined, BellOutlined,
     MenuFoldOutlined, MenuUnfoldOutlined,
-    CalendarOutlined, CustomerServiceOutlined
+    CalendarOutlined, CustomerServiceOutlined, LaptopOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation }
     from 'react-router-dom';
@@ -37,7 +37,7 @@ const AppLayout = ({ children }) => {
         if (role === 'agent') {
             baseItems.push(
                 { key: '/clients', icon: <CustomerServiceOutlined />, label: 'Clients' },
-                { key: '/appareils', icon: <AppstoreOutlined />, label: 'Appareils' },
+                { key: '/appareils', icon: <LaptopOutlined />, label: 'Appareils' },
                 { key: '/interventions', icon: <ToolOutlined />, label: 'Interventions' },
                 { key: '/pieces', icon: <AppstoreOutlined />, label: 'Stock Pièces' },
                 { key: '/factures', icon: <FileTextOutlined />, label: 'Factures' }

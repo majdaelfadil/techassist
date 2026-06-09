@@ -146,20 +146,59 @@ class AgentDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ════════════════════════════════
 
 class AppareilListCreateView(generics.ListCreateAPIView):
-    serializer_class = AppareilSerializer
-    permission_classes = [EstAgent]
-
+    """
+    GET  /api/appareils/            → liste tous les appareils
+    GET  /api/appareils/?client=1   → filtre par client
+    GET  /api/appareils/?search=HP  → recherche par marque/modèle/série
+    POST /api/appareils/            → créer un nouvel appareil
+    """
+    serializer_class   = AppareilSerializer
+    permission_classes = [IsAuthenticated]
+ 
     def get_queryset(self):
-        queryset = Appareil.objects.all()
-        client_id = self.request.query_params.get('client_id')
+        qs = Appareil.objects.select_related("client").all()
+ 
+        # Filtre par client
+        client_id = self.request.query_params.get("client")
         if client_id:
-            queryset = queryset.filter(client_id=client_id)
-        return queryset
-
-class AppareilDetailView(generics.RetrieveUpdateAPIView):
-    queryset = Appareil.objects.all()
-    serializer_class = AppareilSerializer
-    permission_classes = [EstAgent]
+            qs = qs.filter(client__id=client_id)
+ 
+        # Filtre par type
+        type_appareil = self.request.query_params.get("type")
+        if type_appareil:
+            qs = qs.filter(type_appareil=type_appareil)
+ 
+        # Filtre garantie
+        garantie = self.request.query_params.get("garantie")
+        if garantie == "true":
+            qs = qs.filter(sous_garantie=True)
+        elif garantie == "false":
+            qs = qs.filter(sous_garantie=False)
+ 
+        # Recherche texte
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(
+                models.Q(marque__icontains=search)     |
+                models.Q(modele__icontains=search)     |
+                models.Q(numero_serie__icontains=search) |
+                models.Q(client__nom__icontains=search)
+            )
+ 
+        return qs
+ 
+ 
+class AppareilDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET    /api/appareils/<pk>/  → détail
+    PUT    /api/appareils/<pk>/  → mettre à jour
+    PATCH  /api/appareils/<pk>/  → mise à jour partielle
+    DELETE /api/appareils/<pk>/  → supprimer
+    """
+    queryset           = Appareil.objects.select_related("client").all()
+    serializer_class   = AppareilSerializer
+    permission_classes = [IsAuthenticated]
+ 
 
 # ════════════════════════════════
 # ─── PIECES ───

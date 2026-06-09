@@ -15,6 +15,7 @@ import authService from './services/authService';
 import Clients from './pages/Clients';
 import MesRapports from './pages/MesRapports';
 import Rapports from './pages/Rapports';
+import Appareils from './pages/Appareils';
 
 const ProtectedRoute = ({ children, roles }) => {
     if (!authService.isAuthenticated()) {
@@ -121,6 +122,11 @@ function App() {
                         <Navigate to="/dashboard" />
                     }
                 />
+                <Route path="/appareils" element={
+                    <ProtectedRoute roles={['agent']}>
+                        <Appareils />
+                    </ProtectedRoute>
+                } />
             </Routes>
         </BrowserRouter>
     );

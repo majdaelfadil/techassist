@@ -91,33 +91,38 @@ class ProfilUtilisateur(models.Model):
 
 # ─── APPAREIL ───
 class Appareil(models.Model):
+ 
     TYPE_CHOICES = [
-        ('PC', 'PC'),
-        ('Laptop', 'Laptop'),
-        ('Imprimante', 'Imprimante'),
-        ('Serveur', 'Serveur'),
-        ('Autre', 'Autre'),
+        ("ordinateur", "Ordinateur"),
+        ("imprimante",  "Imprimante"),
+        ("serveur",     "Serveur"),
+        ("reseau",      "Réseau"),
+        ("autre",       "Autre"),
     ]
-    client = models.ForeignKey(
-        Client, on_delete=models.CASCADE,
-        related_name='appareils')
-    type_appareil = models.CharField(
-        max_length=50, choices=TYPE_CHOICES)
-    marque = models.CharField(max_length=50)
-    modele = models.CharField(max_length=100)
-    numero_serie = models.CharField(
-        max_length=100, unique=True,
-        blank=True, null=True)
-    date_achat = models.DateField(
-        blank=True, null=True)
-    sous_garantie = models.BooleanField(default=False)
-
-    def __str__(self):
-        return (f"{self.marque} {self.modele}"
-                f" - {self.client.nom}")
-
+ 
+    client            = models.ForeignKey(
+        "Client",
+        on_delete=models.CASCADE,
+        related_name="appareils",
+    )
+    marque            = models.CharField(max_length=100)
+    modele            = models.CharField(max_length=100)
+    type_appareil     = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default="ordinateur",
+    )
+    numero_serie = models.CharField(max_length=100, blank=True, null=True, default="")
+    sous_garantie     = models.BooleanField(default=False)
+    date_fin_garantie = models.DateField(null=True, blank=True)
+    cree_le = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+ 
     class Meta:
         verbose_name = "Appareil"
+        ordering     = ["-cree_le"]
+ 
+    def __str__(self):
+        return f"{self.marque} {self.modele} — {self.client.nom}"
 
 # ─── PIECE ───
 class Piece(models.Model):

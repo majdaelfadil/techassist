@@ -68,14 +68,25 @@ class ProfilUtilisateurSerializer(
                 obj.user.username)
 
 # ─── APPAREIL ───
-class AppareilSerializer(
-        serializers.ModelSerializer):
-    client_nom = serializers.CharField(
-        source='client.nom', read_only=True)
-
+class AppareilSerializer(serializers.ModelSerializer):
+ 
+    client_nom = serializers.CharField(source="client.nom", read_only=True)
+ 
     class Meta:
-        model = Appareil
-        fields = '__all__'
+        model  = Appareil
+        fields = [
+            "id",
+            "client",
+            "client_nom",
+            "marque",
+            "modele",
+            "type_appareil",
+            "numero_serie",
+            "sous_garantie",
+            "date_fin_garantie",
+            "cree_le",
+        ]
+        read_only_fields = ["id", "client_nom", "cree_le"]
 
 # ─── PIECE ───
 class PieceSerializer(serializers.ModelSerializer):
