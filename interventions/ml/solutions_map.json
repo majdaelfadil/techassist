@@ -1,0 +1,10 @@
+{
+  "hardware|reparation": "Diagnostiquer et remplacer le composant matériel défaillant (disque dur, RAM, alimentation ou carte mère)",
+  "hardware|maintenance": "Nettoyer la poussière avec air comprimé et remplacer la pâte thermique du processeur",
+  "software|reparation": "Scanner et réparer le système avec un antivirus à jour et les outils de réparation Windows (sfc /scannow, DISM)",
+  "software|installation": "Installer et configurer le logiciel demandé avec les paramètres adaptés aux besoins du client",
+  "software|configuration": "Configurer les paramètres système et les droits d'accès selon les besoins de l'entreprise",
+  "reseau|depannage": "Redémarrer les équipements réseau, vérifier les câbles et renouveler la configuration IP pour rétablir la connexion",
+  "reseau|configuration": "Configurer le routeur, switch et DHCP pour mettre en place ou sécuriser le réseau local de l'entreprise",
+  "reseau|installation": "Installer le câblage RJ45, le switch et configurer le réseau local complet des bureaux"
+}

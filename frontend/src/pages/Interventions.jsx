@@ -11,7 +11,8 @@ import {
     DeleteOutlined, FilterOutlined, SwapOutlined,
     UserAddOutlined, ReloadOutlined, CheckCircleOutlined,
     RobotOutlined, BulbOutlined, ToolOutlined,
-    ThunderboltOutlined, UserOutlined, ArrowRightOutlined
+    ThunderboltOutlined, UserOutlined, ArrowRightOutlined,
+    SafetyOutlined, ShoppingOutlined, ClockCircleOutlined
 } from '@ant-design/icons';
 import api from '../services/api';
 import GestionImages from '../components/GestionImages';
@@ -19,7 +20,660 @@ import GestionImages from '../components/GestionImages';
 const { Option } = Select;
 const { TextArea } = Input;
 
+// ══════════════════════════════════════════════════
+// CONSTANTES
+// ══════════════════════════════════════════════════
+
+const COULEUR_STATUT = {
+    'nouveau':        '#1890ff',
+    'diagnostique':   '#13c2c2',
+    'assigne':        '#722ed1',
+    'en_cours':       '#fa8c16',
+    'attente_pieces': '#faad14',
+    'termine':        '#52c41a',
+    'valide':         '#a0d911',
+    'facture':        '#eb2f96',
+    'cloture':        '#8c8c8c',
+};
+
+const COULEUR_URGENCE = {
+    'faible':   { color: '#52c41a', bg: '#f6ffed' },
+    'normale':  { color: '#1890ff', bg: '#e6f7ff' },
+    'haute':    { color: '#fa8c16', bg: '#fff7e6' },
+    'critique': { color: '#f5222d', bg: '#fff1f0' },
+};
+
+const ICONE_URGENCE = {
+    'faible':   '🟢',
+    'normale':  '🔵',
+    'haute':    '🟠',
+    'critique': '🔴',
+};
+
+const TYPES_SERVICE = {
+    'reparation':    '🔧 Réparation',
+    'installation':  '💿 Installation',
+    'configuration': '⚙️ Configuration',
+    'maintenance':   '🔩 Maintenance',
+    'depannage':     '🛠️ Dépannage',
+};
+
+const COULEUR_CATEGORIE = {
+    'hardware': '#722ed1',
+    'software': '#1890ff',
+    'reseau':   '#13c2c2',
+};
+
+// ══════════════════════════════════════════════════
+// COMPOSANT RÉSULTAT DIAGNOSTIC (NOUVELLE VERSION)
+// ══════════════════════════════════════════════════
+
+const ResultatDiagnostic = ({
+    diagnostic,
+    technicienChoisi,
+    onChoisirTechnicien
+}) => {
+    const [voirTousTech, setVoirTousTech] = useState(false);
+
+    if (!diagnostic) return null;
+
+    const urgCouleur = COULEUR_URGENCE[diagnostic.urgence] || { color: '#666', bg: '#f0f0f0' };
+
+    return (
+        <div style={{
+            background: '#f6ffed',
+            border: '1px solid #b7eb8f',
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 16
+        }}>
+
+            {/* HEADER */}
+            <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 12
+            }}>
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                }}>
+                    <RobotOutlined style={{
+                        color: '#52c41a',
+                        fontSize: 18
+                    }} />
+                    <span style={{
+                        fontWeight: 700,
+                        color: '#52c41a',
+                        fontSize: 14
+                    }}>
+                        Diagnostic IA
+                    </span>
+                </div>
+
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: '#fff',
+                    padding: '3px 10px',
+                    borderRadius: 20,
+                    border: '1px solid #b7eb8f'
+                }}>
+                    <span style={{
+                        fontSize: 11,
+                        color: '#666'
+                    }}>
+                        Confiance :
+                    </span>
+                    <span style={{
+                        fontWeight: 800,
+                        fontSize: 13,
+                        color: diagnostic.confiance?.globale >= 70
+                            ? '#52c41a'
+                            : '#fa8c16'
+                    }}>
+                        {diagnostic.confiance?.globale}%
+                    </span>
+                </div>
+            </div>
+
+            {/* Alert */}
+            <Alert
+                message={
+                    <span style={{ fontSize: 12 }}>
+                        ✅ Les champs ont été pré-remplis. Vérifiez et modifiez si nécessaire.
+                    </span>
+                }
+                type="success"
+                style={{
+                    borderRadius: 8,
+                    marginBottom: 12,
+                    padding: '5px 10px'
+                }}
+            />
+
+            {/* PRÉDICTIONS GRILLE */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 8,
+                marginBottom: 12
+            }}>
+                {[
+                    {
+                        label: 'CATÉGORIE',
+                        value: diagnostic.categorie?.toUpperCase(),
+                        color: '#1890ff',
+                        bg: '#e6f7ff',
+                        conf: diagnostic.confiance?.categorie
+                    },
+                    {
+                        label: 'URGENCE',
+                        value: ICONE_URGENCE[diagnostic.urgence] + ' ' + diagnostic.urgence?.toUpperCase(),
+                        color: urgCouleur.color,
+                        bg: urgCouleur.bg,
+                        conf: diagnostic.confiance?.urgence
+                    },
+                    {
+                        label: 'TYPE SERVICE',
+                        value: diagnostic.type_service?.toUpperCase(),
+                        color: '#722ed1',
+                        bg: '#f9f0ff',
+                        conf: diagnostic.confiance?.type_service
+                    },
+                    {
+                        label: 'DURÉE EST.',
+                        value: `⏱️ ${diagnostic.duree}h`,
+                        color: '#FF8C00',
+                        bg: '#FFF3E0',
+                        conf: null
+                    }
+                ].map((item, i) => (
+                    <div key={i} style={{
+                        padding: '8px 10px',
+                        background: item.bg,
+                        borderRadius: 8,
+                        textAlign: 'center'
+                    }}>
+                        <div style={{
+                            fontSize: 9,
+                            color: '#999',
+                            fontWeight: 700,
+                            marginBottom: 3,
+                            letterSpacing: 0.5
+                        }}>
+                            {item.label}
+                        </div>
+                        <div style={{
+                            fontWeight: 700,
+                            color: item.color,
+                            fontSize: 11
+                        }}>
+                            {item.value}
+                        </div>
+                        {item.conf && (
+                            <div style={{
+                                fontSize: 9,
+                                color: '#ccc',
+                                marginTop: 2
+                            }}>
+                                {item.conf}%
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            {/* ORIGINE DU PROBLÈME */}
+            {diagnostic.origine_probleme && (
+                <div style={{
+                    background: '#fff',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    marginBottom: 10,
+                    border: '1px solid #f0f0f0',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 8
+                }}>
+                    <ThunderboltOutlined style={{
+                        color: '#faad14',
+                        marginTop: 2,
+                        flexShrink: 0
+                    }} />
+                    <div>
+                        <div style={{
+                            fontSize: 10,
+                            color: '#faad14',
+                            fontWeight: 700,
+                            marginBottom: 2
+                        }}>
+                            ORIGINE DU PROBLÈME
+                        </div>
+                        <div style={{
+                            fontSize: 12,
+                            color: '#333'
+                        }}>
+                            {diagnostic.origine_probleme}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* SOLUTION PROPOSÉE */}
+            {diagnostic.solution && (
+                <div style={{
+                    background: '#fff',
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                    marginBottom: 10,
+                    border: '2px solid #FF8C00',
+                }}>
+                    <div style={{
+                        fontWeight: 700,
+                        fontSize: 12,
+                        color: '#FF8C00',
+                        marginBottom: 8,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                    }}>
+                        <BulbOutlined style={{ fontSize: 14 }} />
+                        Solution recommandée
+                        <Badge
+                            count="IA"
+                            style={{
+                                background: '#FF8C00',
+                                fontSize: 9
+                            }}
+                        />
+                    </div>
+                    <div style={{
+                        fontSize: 13,
+                        color: '#333',
+                        lineHeight: 1.6,
+                        fontWeight: 500
+                    }}>
+                        {diagnostic.solution}
+                    </div>
+                    {diagnostic.confiance?.solution && (
+                        <div style={{
+                            fontSize: 10,
+                            color: '#ccc',
+                            marginTop: 6
+                        }}>
+                            Confiance solution : {diagnostic.confiance.solution}%
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* PIÈCES + PRÉVENTION */}
+            {(diagnostic.pieces_suggerees?.length > 0 || diagnostic.prevention) && (
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 8,
+                    marginBottom: 12
+                }}>
+
+                    {/* Pièces */}
+                    {diagnostic.pieces_suggerees?.length > 0 && (
+                        <div style={{
+                            background: '#fff7e6',
+                            borderRadius: 8,
+                            padding: '10px 12px',
+                            border: '1px solid #ffd591'
+                        }}>
+                            <div style={{
+                                fontWeight: 700,
+                                fontSize: 11,
+                                color: '#fa8c16',
+                                marginBottom: 6,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4
+                            }}>
+                                <ShoppingOutlined />
+                                Pièces suggérées
+                            </div>
+                            {diagnostic.pieces_suggerees.map((p, i) => (
+                                <div key={i} style={{
+                                    fontSize: 11,
+                                    color: '#333',
+                                    padding: '2px 0',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4
+                                }}>
+                                    <span style={{
+                                        color: '#fa8c16',
+                                        fontWeight: 700
+                                    }}>•</span>
+                                    {p}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Prévention */}
+                    {diagnostic.prevention && (
+                        <div style={{
+                            background: '#fffbe6',
+                            borderRadius: 8,
+                            padding: '10px 12px',
+                            border: '1px solid #ffe58f'
+                        }}>
+                            <div style={{
+                                fontWeight: 700,
+                                fontSize: 11,
+                                color: '#faad14',
+                                marginBottom: 6,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4
+                            }}>
+                                <SafetyOutlined />
+                                Conseil préventif
+                            </div>
+                            <div style={{
+                                fontSize: 11,
+                                color: '#666',
+                                lineHeight: 1.5
+                            }}>
+                                {diagnostic.prevention}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* TECHNICIEN RECOMMANDÉ */}
+            {diagnostic.technicien_recommande && (
+                <div style={{
+                    background: '#fff',
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                    border: '1px solid #f0f0f0'
+                }}>
+                    <div style={{
+                        fontWeight: 700,
+                        fontSize: 12,
+                        color: '#1A1A1A',
+                        marginBottom: 10,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }}>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6
+                        }}>
+                            <UserOutlined style={{ color: '#722ed1' }} />
+                            Technicien recommandé
+                        </div>
+                        <Button
+                            size="small"
+                            type="text"
+                            onClick={() => setVoirTousTech(!voirTousTech)}
+                            style={{
+                                fontSize: 11,
+                                color: '#1890ff'
+                            }}
+                        >
+                            {voirTousTech ? 'Masquer' : `Voir tous (${diagnostic.tous_techniciens?.length || 0})`}
+                        </Button>
+                    </div>
+
+                    {/* Technicien principal */}
+                    {(() => {
+                        const tech = diagnostic.technicien_recommande;
+                        const estChoisi = technicienChoisi === tech.id;
+                        return (
+                            <div
+                                onClick={() => onChoisirTechnicien(tech.id, tech.nom)}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    padding: '10px 12px',
+                                    borderRadius: 8,
+                                    background: estChoisi ? '#e6f7ff' : '#f6ffed',
+                                    border: estChoisi ? '2px solid #1890ff' : '1px solid #b7eb8f',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    marginBottom: voirTousTech ? 10 : 0
+                                }}
+                            >
+                                {/* Avatar */}
+                                <div style={{
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: '50%',
+                                    background: '#52c41a22',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: 20,
+                                    flexShrink: 0
+                                }}>
+                                    👨‍🔧
+                                </div>
+
+                                {/* Infos */}
+                                <div style={{ flex: 1 }}>
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        marginBottom: 3
+                                    }}>
+                                        <span style={{
+                                            fontWeight: 700,
+                                            fontSize: 13
+                                        }}>
+                                            {tech.nom}
+                                        </span>
+                                        <Tag style={{
+                                            fontSize: 10,
+                                            borderRadius: 6
+                                        }}>
+                                            {tech.specialite}
+                                        </Tag>
+                                        <span style={{
+                                            background: '#52c41a22',
+                                            color: '#52c41a',
+                                            borderRadius: 10,
+                                            padding: '1px 8px',
+                                            fontSize: 10,
+                                            fontWeight: 700
+                                        }}>
+                                            ⭐ IA
+                                        </span>
+                                    </div>
+                                    <div style={{
+                                        fontSize: 11,
+                                        color: '#666',
+                                        lineHeight: 1.4
+                                    }}>
+                                        {tech.explication}
+                                    </div>
+                                </div>
+
+                                {/* Score */}
+                                <div style={{
+                                    textAlign: 'center',
+                                    minWidth: 52
+                                }}>
+                                    <div style={{
+                                        fontSize: 22,
+                                        fontWeight: 900,
+                                        color: tech.score >= 80 ? '#52c41a' : '#1890ff',
+                                        lineHeight: 1
+                                    }}>
+                                        {tech.score}
+                                    </div>
+                                    <div style={{
+                                        fontSize: 10,
+                                        color: '#999'
+                                    }}>
+                                        /100
+                                    </div>
+                                </div>
+
+                                {estChoisi && (
+                                    <CheckCircleOutlined style={{ color: '#1890ff', fontSize: 18 }} />
+                                )}
+                            </div>
+                        );
+                    })()}
+
+                    {/* Tous les techniciens */}
+                    {voirTousTech && diagnostic.tous_techniciens?.length > 0 && (
+                        <div>
+                            <Divider style={{ margin: '8px 0', fontSize: 11, color: '#ccc' }}>
+                                Classement complet
+                            </Divider>
+
+                            {diagnostic.tous_techniciens.map((tech, i) => (
+                                <div
+                                    key={tech.id}
+                                    onClick={() => onChoisirTechnicien(tech.id, tech.nom)}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 10,
+                                        padding: '8px 10px',
+                                        borderRadius: 8,
+                                        cursor: 'pointer',
+                                        marginBottom: 4,
+                                        background: technicienChoisi === tech.id ? '#e6f7ff' : '#fafafa',
+                                        border: technicienChoisi === tech.id ? '2px solid #1890ff' : '1px solid #f0f0f0',
+                                        opacity: tech.disponible ? 1 : 0.6
+                                    }}
+                                >
+                                    {/* Rang */}
+                                    <div style={{
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: '50%',
+                                        background: i === 0 ? '#52c41a' : i === 1 ? '#1890ff' : '#d9d9d9',
+                                        color: '#fff',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        flexShrink: 0
+                                    }}>
+                                        {i + 1}
+                                    </div>
+
+                                    {/* Infos */}
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 6
+                                        }}>
+                                            <span style={{
+                                                fontWeight: 700,
+                                                fontSize: 12
+                                            }}>
+                                                {tech.nom}
+                                            </span>
+                                            <span style={{
+                                                background: '#f0f0f0',
+                                                borderRadius: 6,
+                                                padding: '1px 6px',
+                                                fontSize: 10,
+                                                color: '#666'
+                                            }}>
+                                                {tech.specialite}
+                                            </span>
+                                            {!tech.disponible && (
+                                                <span style={{
+                                                    color: '#f5222d',
+                                                    fontSize: 10
+                                                }}>
+                                                    Indispo
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div style={{
+                                            display: 'flex',
+                                            gap: 8,
+                                            marginTop: 2
+                                        }}>
+                                            <span style={{
+                                                fontSize: 10,
+                                                color: tech.charge_color || '#52c41a',
+                                                fontWeight: 600
+                                            }}>
+                                                {tech.charge}
+                                            </span>
+                                            <span style={{
+                                                fontSize: 10,
+                                                color: '#ccc'
+                                            }}>
+                                                {tech.interventions_en_cours} en cours
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Score */}
+                                    <div style={{
+                                        textAlign: 'center',
+                                        minWidth: 44
+                                    }}>
+                                        <div style={{
+                                            fontSize: 16,
+                                            fontWeight: 800,
+                                            color: tech.score >= 80 ? '#52c41a' : tech.score >= 60 ? '#1890ff' : '#fa8c16',
+                                            lineHeight: 1
+                                        }}>
+                                            {tech.score}
+                                        </div>
+                                        <div style={{
+                                            fontSize: 9,
+                                            color: '#ccc'
+                                        }}>
+                                            /100
+                                        </div>
+                                    </div>
+
+                                    {technicienChoisi === tech.id && (
+                                        <CheckCircleOutlined style={{ color: '#1890ff', fontSize: 14 }} />
+                                    )}
+                                </div>
+                            ))}
+
+                            <div style={{
+                                fontSize: 10,
+                                color: '#ccc',
+                                textAlign: 'center',
+                                marginTop: 6
+                            }}>
+                                Cliquez pour sélectionner
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ══════════════════════════════════════════════════
+
 const Interventions = () => {
+    // États existants
     const [interventions, setInterventions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -41,21 +695,19 @@ const Interventions = () => {
     const [disponibilite, setDisponibilite] = useState(null);
     const [checkingDispo, setCheckingDispo] = useState(false);
 
-    // ─── ÉTATS DIAGNOSTIC IA ───
-    const [descriptionIA, setDescriptionIA] = useState('');
-    const [loadingIA, setLoadingIA] = useState(false);
-    const [diagnosticResult, setDiagnosticResult] = useState(null);
-    const [etapeCreation, setEtapeCreation] = useState(0);
-    // 0 = saisie description + IA
-    // 1 = formulaire pré-rempli
+    // ─── NOUVEAUX ÉTATS DIAGNOSTIC IA ───
+    const [diagnostic, setDiagnostic] = useState(null);
+    const [loadingDiag, setLoadingDiag] = useState(false);
+    const [technicienChoisi, setTechnicienChoisi] = useState(null);
+    const [nomTechChoisi, setNomTechChoisi] = useState('');
 
     const [form] = Form.useForm();
     const [formStatut] = Form.useForm();
     const [formAssigner] = Form.useForm();
 
-    // ════════════════════════════════
+    // ════════════════════════════════════
     // ─── CHARGEMENT DONNÉES ───
-    // ════════════════════════════════
+    // ════════════════════════════════════
 
     const chargerInterventions = useCallback(async () => {
         setLoading(true);
@@ -94,10 +746,16 @@ const Interventions = () => {
     }, [chargerInterventions, chargerClients, chargerTechniciens]);
 
     const chargerAppareils = async (clientId) => {
+        if (!clientId) {
+            setAppareils([]);
+            return;
+        }
         try {
             const res = await api.get(`/appareils/?client_id=${clientId}`);
             setAppareils(res.data);
-        } catch {}
+        } catch {
+            setAppareils([]);
+        }
     };
 
     const chargerTransitions = async (id) => {
@@ -107,71 +765,101 @@ const Interventions = () => {
         } catch {}
     };
 
-    // ════════════════════════════════
-    // ─── DIAGNOSTIC IA ───
-    // ════════════════════════════════
+    // ════════════════════════════════════
+    // ─── DIAGNOSTIC IA (NOUVELLE VERSION) ───
+    // ════════════════════════════════════
 
     const lancerDiagnostic = async () => {
-        if (descriptionIA.trim().length < 10) {
-            message.warning('Décrivez le problème en au moins 10 caractères');
+        const values = form.getFieldsValue();
+        const description = values.description;
+
+        if (!description || description.trim().length < 5) {
+            message.warning('Saisissez une description (minimum 5 caractères)');
             return;
         }
-        setLoadingIA(true);
-        setDiagnosticResult(null);
+
+        setLoadingDiag(true);
+        setDiagnostic(null);
+        setTechnicienChoisi(null);
+        setNomTechChoisi('');
+
         try {
-            const res = await api.post('/diagnostic/ia/', {
-                description: descriptionIA
+            const res = await api.post('/diagnostic/analyser/', {
+                description: description
             });
 
-            setDiagnosticResult(res.data);
+            const diag = res.data.diagnostic;
+            setDiagnostic(diag);
 
-            // ── Remplir automatiquement le formulaire ──
+            // Pré-remplir le formulaire
             form.setFieldsValue({
-                description:  descriptionIA,
-                type_service: res.data.type_service   || undefined,
-                urgence:      res.data.urgence         || 'normale',
+                type_service: diag.type_service,
+                urgence:      diag.urgence,
+                duree_estimee: diag.duree,
             });
 
-            // Passer à l'étape 2 : formulaire
-            setEtapeCreation(1);
+            // Sélectionner technicien recommandé
+            if (diag.technicien_recommande) {
+                const tech = diag.technicien_recommande;
+                setTechnicienChoisi(tech.id);
+                setNomTechChoisi(tech.nom);
+                form.setFieldsValue({
+                    technicien_id: tech.id
+                });
+            }
 
-            message.success('Diagnostic IA effectué ! Champs pré-remplis.');
-        } catch (e) {
+            message.success('🤖 Diagnostic IA généré !');
+
+        } catch (error) {
             message.error(
-                e.response?.data?.erreur ||
-                'Erreur lors du diagnostic IA'
+                error.response?.data?.erreur || 'Erreur diagnostic IA'
             );
         } finally {
-            setLoadingIA(false);
+            setLoadingDiag(false);
         }
+    };
+
+    const onChoisirTechnicien = (id, nom) => {
+        setTechnicienChoisi(id);
+        setNomTechChoisi(nom);
+        form.setFieldsValue({
+            technicien_id: id
+        });
+        message.info(`✅ Technicien sélectionné : ${nom}`);
     };
 
     const reinitialiserModal = () => {
         setModalCreer(false);
-        setEtapeCreation(0);
-        setDescriptionIA('');
-        setDiagnosticResult(null);
+        setDiagnostic(null);
+        setTechnicienChoisi(null);
+        setNomTechChoisi('');
         form.resetFields();
     };
 
-    // ════════════════════════════════
+    // ════════════════════════════════════
     // ─── CRÉER INTERVENTION ───
-    // ════════════════════════════════
+    // ════════════════════════════════════
 
     const creerIntervention = async (values) => {
         try {
-            await api.post('/interventions/', values);
-            message.success('Intervention créée !');
+            const data = {
+                ...values,
+                technicien_id: technicienChoisi,
+            };
+            await api.post('/interventions/', data);
+            message.success('✅ Intervention créée !');
             reinitialiserModal();
             chargerInterventions();
-        } catch {
-            message.error('Erreur création');
+        } catch (error) {
+            message.error(
+                error.response?.data?.erreur || 'Erreur création'
+            );
         }
     };
 
-    // ════════════════════════════════
+    // ════════════════════════════════════
     // ─── AUTRES ACTIONS ───
-    // ════════════════════════════════
+    // ════════════════════════════════════
 
     const supprimerIntervention = async (id) => {
         try {
@@ -275,42 +963,9 @@ const Interventions = () => {
         } catch {}
     };
 
-    // ════════════════════════════════
+    // ════════════════════════════════════
     // ─── CONSTANTES UI ───
-    // ════════════════════════════════
-
-    const couleurUrgence = {
-        'faible':   { color: '#52c41a', bg: '#f6ffed' },
-        'normale':  { color: '#1890ff', bg: '#e6f7ff' },
-        'haute':    { color: '#fa8c16', bg: '#fff7e6' },
-        'critique': { color: '#f5222d', bg: '#fff1f0' },
-    };
-
-    const couleurStatut = {
-        'nouveau':        '#1890ff',
-        'diagnostique':   '#13c2c2',
-        'assigne':        '#722ed1',
-        'en_cours':       '#fa8c16',
-        'attente_pieces': '#faad14',
-        'termine':        '#52c41a',
-        'valide':         '#a0d911',
-        'facture':        '#eb2f96',
-        'cloture':        '#8c8c8c',
-    };
-
-    const couleurCategorie = {
-        'hardware': '#722ed1',
-        'software': '#1890ff',
-        'reseau':   '#13c2c2',
-    };
-
-    const typesService = {
-        'reparation':    'Réparation',
-        'installation':  'Installation',
-        'configuration': 'Configuration',
-        'maintenance':   'Maintenance',
-        'depannage':     'Dépannage'
-    };
+    // ════════════════════════════════════
 
     const interventionsFiltrees = interventions.filter(i =>
         i.numero?.toLowerCase().includes(search.toLowerCase()) ||
@@ -318,9 +973,9 @@ const Interventions = () => {
         i.technicien_nom?.toLowerCase().includes(search.toLowerCase())
     );
 
-    // ════════════════════════════════
+    // ════════════════════════════════════
     // ─── COLONNES ───
-    // ════════════════════════════════
+    // ════════════════════════════════════
 
     const colonnes = [
         {
@@ -354,20 +1009,20 @@ const Interventions = () => {
         {
             title: 'Type',
             dataIndex: 'type_service',
-            render: (text) => typesService[text] || text
+            render: (text) => TYPES_SERVICE[text] || text
         },
         {
             title: 'Urgence',
             dataIndex: 'urgence',
             render: (urgence) => {
-                const c = couleurUrgence[urgence] || couleurUrgence['normale'];
+                const c = COULEUR_URGENCE[urgence] || COULEUR_URGENCE['normale'];
                 return (
                     <span style={{
                         padding: '3px 10px', borderRadius: 20,
                         fontSize: 12, fontWeight: 600,
                         color: c.color, background: c.bg
                     }}>
-                        {urgence?.toUpperCase()}
+                        {ICONE_URGENCE[urgence]} {urgence?.toUpperCase()}
                     </span>
                 );
             }
@@ -376,7 +1031,7 @@ const Interventions = () => {
             title: 'Statut',
             dataIndex: 'statut',
             render: (statut) => (
-                <Tag color={couleurStatut[statut]}
+                <Tag color={COULEUR_STATUT[statut]}
                      style={{ borderRadius: 6, fontWeight: 500 }}>
                     {statut?.toUpperCase()}
                 </Tag>
@@ -456,9 +1111,9 @@ const Interventions = () => {
         },
     ];
 
-    // ════════════════════════════════
+    // ════════════════════════════════════
     // ─── RENDER ───
-    // ════════════════════════════════
+    // ════════════════════════════════════
 
     return (
         <div style={{ padding: 28 }}>
@@ -489,7 +1144,13 @@ const Interventions = () => {
                         type="primary"
                         icon={<PlusOutlined />}
                         size="large"
-                        onClick={() => setModalCreer(true)}
+                        onClick={() => {
+                            setModalCreer(true);
+                            form.resetFields();
+                            setDiagnostic(null);
+                            setTechnicienChoisi(null);
+                            setNomTechChoisi('');
+                        }}
                         style={{
                             background: '#FF8C00',
                             borderColor: '#FF8C00',
@@ -524,7 +1185,7 @@ const Interventions = () => {
                           'attente_pieces','termine','valide','facture','cloture']
                             .map(s => (
                             <Option key={s} value={s}>
-                                <Tag color={couleurStatut[s]} style={{ borderRadius: 4 }}>
+                                <Tag color={COULEUR_STATUT[s]} style={{ borderRadius: 4 }}>
                                     {s.toUpperCase()}
                                 </Tag>
                             </Option>
@@ -533,12 +1194,14 @@ const Interventions = () => {
                     <Select placeholder="Urgence" allowClear
                         style={{ width: 140 }} onChange={setFiltreUrgence}>
                         {['faible','normale','haute','critique'].map(u => (
-                            <Option key={u} value={u}>{u.toUpperCase()}</Option>
+                            <Option key={u} value={u}>
+                                {ICONE_URGENCE[u]} {u.toUpperCase()}
+                            </Option>
                         ))}
                     </Select>
                     <Select placeholder="Type de service" allowClear
                         style={{ width: 180 }} onChange={setFiltreType}>
-                        {Object.entries(typesService).map(([k, v]) => (
+                        {Object.entries(TYPES_SERVICE).map(([k, v]) => (
                             <Option key={k} value={k}>{v}</Option>
                         ))}
                     </Select>
@@ -565,16 +1228,25 @@ const Interventions = () => {
             </Card>
 
             {/* ════════════════════════════════════════
-                ─── MODAL CRÉER AVEC DIAGNOSTIC IA ───
+                ─── MODAL CRÉER (AVEC DIAGNOSTIC IA AMÉLIORÉ) ───
                 ════════════════════════════════════════ */}
             <Modal
                 title={
-                    <Space>
-                        <RobotOutlined style={{ color: '#FF8C00' }} />
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10
+                    }}>
+                        <PlusOutlined style={{ color: '#FF8C00' }} />
                         <span style={{ fontWeight: 700 }}>
                             Nouvelle intervention
                         </span>
-                    </Space>
+                        {diagnostic && (
+                            <Tag color="success" icon={<RobotOutlined />}>
+                                Diagnostic IA
+                            </Tag>
+                        )}
+                    </div>
                 }
                 open={modalCreer}
                 onCancel={reinitialiserModal}
@@ -582,373 +1254,27 @@ const Interventions = () => {
                 width={700}
                 destroyOnClose
             >
-                {/* ─── STEPS ─── */}
-                <Steps
-                    current={etapeCreation}
-                    size="small"
-                    style={{ marginBottom: 24, marginTop: 8 }}
-                    items={[
-                        {
-                            title: 'Diagnostic IA',
-                            icon: <RobotOutlined />,
-                            description: 'Analyse du problème'
-                        },
-                        {
-                            title: 'Formulaire',
-                            icon: <CheckCircleOutlined />,
-                            description: 'Champs pré-remplis'
-                        }
-                    ]}
-                />
-
-                {/* ══════════════════════════
-                    ÉTAPE 0 — DIAGNOSTIC IA
-                    ══════════════════════════ */}
-                {etapeCreation === 0 && (
-                    <div>
-                        {/* Zone de saisie description */}
+                <Form
+                    form={form}
+                    layout="vertical"
+                    onFinish={creerIntervention}
+                    style={{ marginTop: 16 }}
+                >
+                    {/* ── Client & Appareil ── */}
+                    <div style={{
+                        background: '#f8f9fa',
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                        marginBottom: 14
+                    }}>
                         <div style={{
-                            background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
-                            borderRadius: 12,
-                            padding: 20,
-                            marginBottom: 16
+                            fontWeight: 700,
+                            fontSize: 13,
+                            marginBottom: 12
                         }}>
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                marginBottom: 12
-                            }}>
-                                <RobotOutlined style={{
-                                    color: '#FF8C00', fontSize: 18
-                                }} />
-                                <span style={{
-                                    color: '#fff', fontWeight: 600,
-                                    fontSize: 14
-                                }}>
-                                    Décrivez le problème du client
-                                </span>
-                                <Tag color="#FF8C00" style={{
-                                    marginLeft: 'auto', fontSize: 11
-                                }}>
-                                    Analyse IA
-                                </Tag>
-                            </div>
-                            <TextArea
-                                rows={5}
-                                placeholder={
-                                    "Exemple :\n" +
-                                    "« L'ordinateur ne démarre plus, " +
-                                    "l'écran reste noir après allumage. »\n" +
-                                    "« Le WiFi est très lent et se déconnecte " +
-                                    "toutes les 5 minutes. »"
-                                }
-                                value={descriptionIA}
-                                onChange={(e) => setDescriptionIA(e.target.value)}
-                                style={{
-                                    borderRadius: 8,
-                                    background: 'rgba(255,255,255,0.08)',
-                                    border: '1px solid rgba(255,255,255,0.15)',
-                                    color: '#fff',
-                                    fontSize: 14,
-                                    resize: 'none'
-                                }}
-                            />
-                            <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginTop: 12
-                            }}>
-                                <span style={{
-                                    color: 'rgba(255,255,255,0.4)',
-                                    fontSize: 12
-                                }}>
-                                    {descriptionIA.length} caractères
-                                    {descriptionIA.length < 10 &&
-                                     descriptionIA.length > 0 &&
-                                        ' (minimum 10)'}
-                                </span>
-                                <Button
-                                    type="primary"
-                                    icon={loadingIA
-                                        ? <Spin size="small" />
-                                        : <RobotOutlined />}
-                                    loading={loadingIA}
-                                    disabled={descriptionIA.trim().length < 10}
-                                    onClick={lancerDiagnostic}
-                                    style={{
-                                        background: '#FF8C00',
-                                        borderColor: '#FF8C00',
-                                        borderRadius: 8,
-                                        fontWeight: 600,
-                                        height: 40,
-                                        paddingInline: 20
-                                    }}
-                                >
-                                    {loadingIA
-                                        ? 'Analyse en cours...'
-                                        : 'Analyser avec l\'IA'}
-                                </Button>
-                            </div>
+                            👤 Client & Appareil
                         </div>
-
-                        {/* Résultat diagnostic */}
-                        {diagnosticResult && (
-                            <div style={{ marginBottom: 16 }}>
-                                <Divider style={{ margin: '16px 0 12px' }}>
-                                    <Space>
-                                        <BulbOutlined style={{ color: '#FF8C00' }} />
-                                        <span style={{ fontSize: 13, color: '#666' }}>
-                                            Résultats du diagnostic
-                                        </span>
-                                    </Space>
-                                </Divider>
-
-                                {/* Catégorie + Urgence */}
-                                <div style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '1fr 1fr 1fr',
-                                    gap: 10, marginBottom: 12
-                                }}>
-                                    {[
-                                        {
-                                            label: 'Catégorie',
-                                            value: diagnosticResult.categorie?.toUpperCase(),
-                                            color: couleurCategorie[diagnosticResult.categorie] || '#666',
-                                            conf: diagnosticResult.confiance?.categorie,
-                                            icon: <ToolOutlined />
-                                        },
-                                        {
-                                            label: 'Urgence',
-                                            value: diagnosticResult.urgence?.toUpperCase(),
-                                            color: couleurUrgence[diagnosticResult.urgence]?.color || '#666',
-                                            bg: couleurUrgence[diagnosticResult.urgence]?.bg,
-                                            conf: diagnosticResult.confiance?.urgence,
-                                            icon: <ThunderboltOutlined />
-                                        },
-                                        {
-                                            label: 'Type de service',
-                                            value: typesService[diagnosticResult.type_service] || diagnosticResult.type_service,
-                                            color: '#FF8C00',
-                                            conf: diagnosticResult.confiance?.type_service,
-                                            icon: <ArrowRightOutlined />
-                                        }
-                                    ].map((item, i) => (
-                                        <div key={i} style={{
-                                            padding: '10px 14px',
-                                            background: item.bg || '#f8f9fa',
-                                            borderRadius: 10,
-                                            borderLeft: `3px solid ${item.color}`
-                                        }}>
-                                            <div style={{
-                                                fontSize: 10, color: '#999',
-                                                fontWeight: 600,
-                                                textTransform: 'uppercase',
-                                                marginBottom: 4,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 4
-                                            }}>
-                                                {item.icon} {item.label}
-                                            </div>
-                                            <div style={{
-                                                fontWeight: 700,
-                                                color: item.color,
-                                                fontSize: 13
-                                            }}>
-                                                {item.value}
-                                            </div>
-                                            {item.conf && (
-                                                <div style={{
-                                                    fontSize: 10,
-                                                    color: '#999',
-                                                    marginTop: 2
-                                                }}>
-                                                    Confiance : {item.conf}%
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Origine */}
-                                <div style={{
-                                    padding: '10px 14px',
-                                    background: '#fffbe6',
-                                    borderRadius: 10,
-                                    border: '1px solid #ffe58f',
-                                    marginBottom: 10
-                                }}>
-                                    <div style={{
-                                        fontSize: 10, color: '#ad6800',
-                                        fontWeight: 600,
-                                        textTransform: 'uppercase',
-                                        marginBottom: 4
-                                    }}>
-                                        <BulbOutlined /> Origine identifiée
-                                    </div>
-                                    <div style={{
-                                        fontWeight: 600, color: '#333', fontSize: 13
-                                    }}>
-                                        {diagnosticResult.origine_probleme}
-                                    </div>
-                                </div>
-
-                                {/* Pièces + Technicien */}
-                                <div style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '1fr 1fr',
-                                    gap: 10, marginBottom: 16
-                                }}>
-                                    {/* Pièces suggérées */}
-                                    <div style={{
-                                        padding: '10px 14px',
-                                        background: '#f6ffed',
-                                        borderRadius: 10,
-                                        border: '1px solid #b7eb8f'
-                                    }}>
-                                        <div style={{
-                                            fontSize: 10, color: '#389e0d',
-                                            fontWeight: 600,
-                                            textTransform: 'uppercase',
-                                            marginBottom: 6
-                                        }}>
-                                            <ToolOutlined /> Pièces suggérées
-                                        </div>
-                                        {diagnosticResult.pieces_suggerees?.length > 0 ? (
-                                            <Space wrap size={4}>
-                                                {diagnosticResult.pieces_suggerees.map(
-                                                    (p, i) => (
-                                                    <Tag key={i} color="green"
-                                                         style={{ fontSize: 11 }}>
-                                                        {p}
-                                                    </Tag>
-                                                ))}
-                                            </Space>
-                                        ) : (
-                                            <span style={{
-                                                color: '#999', fontSize: 12
-                                            }}>
-                                                Aucune pièce nécessaire
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {/* Technicien recommandé */}
-                                    <div style={{
-                                        padding: '10px 14px',
-                                        background: '#e6f7ff',
-                                        borderRadius: 10,
-                                        border: '1px solid #91d5ff'
-                                    }}>
-                                        <div style={{
-                                            fontSize: 10, color: '#0050b3',
-                                            fontWeight: 600,
-                                            textTransform: 'uppercase',
-                                            marginBottom: 6
-                                        }}>
-                                            <UserOutlined /> Technicien recommandé
-                                        </div>
-                                        {diagnosticResult.technicien_recommande ? (
-                                            <div>
-                                                <div style={{
-                                                    fontWeight: 700,
-                                                    color: '#003a8c',
-                                                    fontSize: 13
-                                                }}>
-                                                    {diagnosticResult.technicien_recommande.nom}
-                                                </div>
-                                                <div style={{
-                                                    fontSize: 11, color: '#666'
-                                                }}>
-                                                    {diagnosticResult.technicien_recommande.specialite}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <span style={{
-                                                color: '#999', fontSize: 12
-                                            }}>
-                                                Aucun technicien disponible
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Bouton continuer */}
-                                <Button
-                                    type="primary"
-                                    block
-                                    size="large"
-                                    icon={<ArrowRightOutlined />}
-                                    onClick={() => setEtapeCreation(1)}
-                                    style={{
-                                        background: '#1A1A1A',
-                                        borderColor: '#1A1A1A',
-                                        borderRadius: 8,
-                                        fontWeight: 600,
-                                        height: 44
-                                    }}
-                                >
-                                    Continuer avec ce diagnostic
-                                </Button>
-                            </div>
-                        )}
-
-                        {/* Lien passer sans IA */}
-                        {!diagnosticResult && (
-                            <div style={{ textAlign: 'center', marginTop: 8 }}>
-                                <Button
-                                    type="link"
-                                    style={{ color: '#999', fontSize: 12 }}
-                                    onClick={() => setEtapeCreation(1)}
-                                >
-                                    Passer sans diagnostic IA →
-                                </Button>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* ══════════════════════════
-                    ÉTAPE 1 — FORMULAIRE
-                    ══════════════════════════ */}
-                {etapeCreation === 1 && (
-                    <div>
-                        {/* Résumé diagnostic si disponible */}
-                        {diagnosticResult && (
-                            <Alert
-                                type="success"
-                                showIcon
-                                icon={<RobotOutlined />}
-                                message="Formulaire pré-rempli par l'IA"
-                                description={
-                                    <span style={{ fontSize: 12 }}>
-                                        Type : <strong>{typesService[diagnosticResult.type_service]}</strong>
-                                        {' · '}
-                                        Urgence : <strong>{diagnosticResult.urgence?.toUpperCase()}</strong>
-                                        {' · '}
-                                        Origine : <strong>{diagnosticResult.origine_probleme}</strong>
-                                    </span>
-                                }
-                                style={{ borderRadius: 8, marginBottom: 16 }}
-                                action={
-                                    <Button
-                                        size="small"
-                                        onClick={() => setEtapeCreation(0)}
-                                        style={{ fontSize: 11 }}
-                                    >
-                                        Modifier
-                                    </Button>
-                                }
-                            />
-                        )}
-
-                        <Form
-                            form={form}
-                            layout="vertical"
-                            onFinish={creerIntervention}
-                        >
+                        <Space style={{ width: '100%' }} size={12}>
                             <Form.Item
                                 label="Client"
                                 name="client_id"
@@ -956,12 +1282,14 @@ const Interventions = () => {
                                     required: true,
                                     message: 'Sélectionnez un client'
                                 }]}
+                                style={{ flex: 1, margin: 0 }}
                             >
                                 <Select
-                                    placeholder="Choisir un client"
+                                    placeholder="Choisir..."
                                     showSearch
-                                    filterOption={(input, option) =>
-                                        option.children.toLowerCase()
+                                    filterOption={(input, opt) =>
+                                        opt.children?.toString()
+                                            .toLowerCase()
                                             .includes(input.toLowerCase())
                                     }
                                     onChange={chargerAppareils}
@@ -974,9 +1302,13 @@ const Interventions = () => {
                                 </Select>
                             </Form.Item>
 
-                            <Form.Item label="Appareil" name="appareil_id">
+                            <Form.Item
+                                label="Appareil"
+                                name="appareil_id"
+                                style={{ flex: 1, margin: 0 }}
+                            >
                                 <Select
-                                    placeholder="Choisir un appareil (optionnel)"
+                                    placeholder="Optionnel"
                                     allowClear
                                 >
                                     {appareils.map(a => (
@@ -987,191 +1319,205 @@ const Interventions = () => {
                                     ))}
                                 </Select>
                             </Form.Item>
+                        </Space>
+                    </div>
 
-                            {/* Description — pré-remplie par IA */}
+                    {/* ── Description + Bouton IA ── */}
+                    <div style={{
+                        background: '#f8f9fa',
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                        marginBottom: 14
+                    }}>
+                        <div style={{
+                            fontWeight: 700,
+                            fontSize: 13,
+                            marginBottom: 12
+                        }}>
+                            📝 Description du problème
+                        </div>
+
+                        <Form.Item
+                            name="description"
+                            rules={[{
+                                required: true,
+                                message: 'Description obligatoire'
+                            }]}
+                            style={{ margin: 0 }}
+                        >
+                            <TextArea
+                                rows={4}
+                                placeholder="Décrivez le problème du client en détail..."
+                                style={{ borderRadius: 8 }}
+                            />
+                        </Form.Item>
+
+                        <Button
+                            type="dashed"
+                            icon={loadingDiag ? <Spin size="small" /> : <RobotOutlined />}
+                            loading={loadingDiag}
+                            onClick={lancerDiagnostic}
+                            style={{
+                                marginTop: 10,
+                                width: '100%',
+                                borderRadius: 8,
+                                borderColor: '#FF8C00',
+                                color: '#FF8C00',
+                                fontWeight: 600,
+                                height: 44
+                            }}
+                        >
+                            {loadingDiag
+                                ? 'Analyse en cours...'
+                                : '🤖 Analyser avec l\'IA — Solution + Technicien'}
+                        </Button>
+                    </div>
+
+                    {/* ── Résultat diagnostic (NOUVEAU COMPOSANT) ── */}
+                    {diagnostic && (
+                        <ResultatDiagnostic
+                            diagnostic={diagnostic}
+                            technicienChoisi={technicienChoisi}
+                            onChoisirTechnicien={onChoisirTechnicien}
+                        />
+                    )}
+
+                    {/* ── Détails intervention ── */}
+                    <div style={{
+                        background: '#f8f9fa',
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                        marginBottom: 14
+                    }}>
+                        <div style={{
+                            fontWeight: 700,
+                            fontSize: 13,
+                            marginBottom: 4
+                        }}>
+                            ⚙️ Détails
+                            {diagnostic && (
+                                <span style={{
+                                    fontSize: 11,
+                                    color: '#52c41a',
+                                    fontWeight: 400,
+                                    marginLeft: 8
+                                }}>
+                                    (pré-rempli par IA)
+                                </span>
+                            )}
+                        </div>
+
+                        <Space style={{ width: '100%', marginTop: 12 }} size={12}>
                             <Form.Item
-                                label={
-                                    <Space>
-                                        <span>Description du problème</span>
-                                        {diagnosticResult && (
-                                            <Badge
-                                                count="IA"
-                                                style={{
-                                                    backgroundColor: '#FF8C00',
-                                                    fontSize: 10
-                                                }}
-                                            />
-                                        )}
-                                    </Space>
-                                }
-                                name="description"
+                                label="Type service"
+                                name="type_service"
                                 rules={[{
                                     required: true,
-                                    message: 'Description obligatoire'
+                                    message: 'Obligatoire'
                                 }]}
+                                style={{ flex: 1, margin: 0 }}
                             >
-                                <TextArea
-                                    rows={3}
-                                    placeholder="Décrivez le problème..."
-                                    style={{ borderRadius: 8 }}
-                                />
+                                <Select placeholder="Type">
+                                    {Object.entries(TYPES_SERVICE).map(([k, v]) => (
+                                        <Option key={k} value={k}>{v}</Option>
+                                    ))}
+                                </Select>
                             </Form.Item>
 
-                            <Space style={{ width: '100%' }} size={12}>
-                                {/* Type de service — pré-rempli par IA */}
-                                <Form.Item
-                                    label={
-                                        <Space>
-                                            <span>Type de service</span>
-                                            {diagnosticResult && (
-                                                <Badge count="IA" style={{
-                                                    backgroundColor: '#FF8C00',
-                                                    fontSize: 10
-                                                }} />
-                                            )}
-                                        </Space>
-                                    }
-                                    name="type_service"
-                                    rules={[{
-                                        required: true,
-                                        message: 'Obligatoire'
-                                    }]}
-                                    style={{ flex: 1 }}
-                                >
-                                    <Select placeholder="Type">
-                                        {Object.entries(typesService).map(([k, v]) => (
-                                            <Option key={k} value={k}>{v}</Option>
-                                        ))}
-                                    </Select>
-                                </Form.Item>
+                            <Form.Item
+                                label="Urgence"
+                                name="urgence"
+                                initialValue="normale"
+                                style={{ flex: 1, margin: 0 }}
+                            >
+                                <Select>
+                                    <Option value="faible">🟢 Faible</Option>
+                                    <Option value="normale">🔵 Normale</Option>
+                                    <Option value="haute">🟠 Haute</Option>
+                                    <Option value="critique">🔴 Critique</Option>
+                                </Select>
+                            </Form.Item>
+                        </Space>
 
-                                <Form.Item
-                                    label="Canal d'entrée"
-                                    name="canal_entree"
-                                    rules={[{
-                                        required: true,
-                                        message: 'Obligatoire'
-                                    }]}
-                                    style={{ flex: 1 }}
-                                >
-                                    <Select placeholder="Canal">
-                                        <Option value="telephone">📞 Téléphone</Option>
-                                        <Option value="boutique">🏪 Boutique</Option>
-                                        <Option value="email">✉️ Email</Option>
-                                    </Select>
-                                </Form.Item>
+                        <Space style={{ width: '100%', marginTop: 12 }} size={12}>
+                            <Form.Item
+                                label="Canal"
+                                name="canal_entree"
+                                rules={[{
+                                    required: true,
+                                    message: 'Obligatoire'
+                                }]}
+                                style={{ flex: 1, margin: 0 }}
+                            >
+                                <Select placeholder="Canal">
+                                    <Option value="telephone">📞 Téléphone</Option>
+                                    <Option value="boutique">🏪 Boutique</Option>
+                                    <Option value="email">✉️ Email</Option>
+                                </Select>
+                            </Form.Item>
 
-                                {/* Urgence — pré-remplie par IA */}
-                                <Form.Item
-                                    label={
-                                        <Space>
-                                            <span>Urgence</span>
-                                            {diagnosticResult && (
-                                                <Badge count="IA" style={{
-                                                    backgroundColor: '#FF8C00',
-                                                    fontSize: 10
-                                                }} />
-                                            )}
-                                        </Space>
-                                    }
-                                    name="urgence"
-                                    initialValue="normale"
-                                    style={{ flex: 1 }}
-                                >
-                                    <Select>
-                                        <Option value="faible">🟢 Faible</Option>
-                                        <Option value="normale">🔵 Normale</Option>
-                                        <Option value="haute">🟠 Haute</Option>
-                                        <Option value="critique">🔴 Critique</Option>
-                                    </Select>
-                                </Form.Item>
-                            </Space>
-
-                            {/* Suggestion technicien */}
-                            {diagnosticResult?.technicien_recommande && (
-                                <Alert
-                                    type="info"
-                                    showIcon
-                                    icon={<UserOutlined />}
-                                    message={
-                                        <span style={{ fontSize: 13 }}>
-                                            Technicien recommandé :{' '}
-                                            <strong>
-                                                {diagnosticResult.technicien_recommande.nom}
-                                            </strong>
-                                            {' '}
-                                            <Tag color="blue" style={{ fontSize: 11 }}>
-                                                {diagnosticResult.technicien_recommande.specialite}
-                                            </Tag>
-                                        </span>
-                                    }
-                                    style={{
-                                        borderRadius: 8, marginBottom: 16
-                                    }}
+                            <Form.Item
+                                label="Durée estimée"
+                                name="duree_estimee"
+                                style={{ flex: 1, margin: 0 }}
+                            >
+                                <InputNumber
+                                    min={0.5}
+                                    step={0.5}
+                                    style={{ width: '100%', borderRadius: 8 }}
+                                    addonAfter="h"
                                 />
-                            )}
+                            </Form.Item>
+                        </Space>
 
-                            {/* Suggestion pièces */}
-                            {diagnosticResult?.pieces_suggerees?.length > 0 && (
-                                <Alert
-                                    type="warning"
-                                    showIcon
-                                    icon={<ToolOutlined />}
-                                    message={
-                                        <span style={{ fontSize: 13 }}>
-                                            Pièces probablement nécessaires :{' '}
-                                            <Space wrap size={4} style={{ marginTop: 4 }}>
-                                                {diagnosticResult.pieces_suggerees.map(
-                                                    (p, i) => (
-                                                    <Tag key={i} color="orange"
-                                                         style={{ fontSize: 11 }}>
-                                                        {p}
-                                                    </Tag>
-                                                ))}
-                                            </Space>
-                                        </span>
-                                    }
-                                    style={{
-                                        borderRadius: 8, marginBottom: 16
-                                    }}
-                                />
-                            )}
-
+                        {/* Technicien sélectionné */}
+                        {technicienChoisi && (
                             <div style={{
+                                marginTop: 10,
+                                padding: '8px 12px',
+                                background: '#e6f7ff',
+                                borderRadius: 8,
+                                border: '1px solid #91d5ff',
+                                fontSize: 12,
+                                color: '#1890ff',
+                                fontWeight: 600,
                                 display: 'flex',
-                                justifyContent: 'space-between',
-                                gap: 12, marginTop: 8
+                                alignItems: 'center',
+                                gap: 6
                             }}>
-                                <Button
-                                    onClick={() => setEtapeCreation(0)}
-                                    style={{ borderRadius: 8 }}
-                                >
-                                    ← Retour au diagnostic
-                                </Button>
-                                <Space>
-                                    <Button
-                                        onClick={reinitialiserModal}
-                                        style={{ borderRadius: 8 }}
-                                    >
-                                        Annuler
-                                    </Button>
-                                    <Button
-                                        type="primary"
-                                        htmlType="submit"
-                                        style={{
-                                            background: '#FF8C00',
-                                            borderColor: '#FF8C00',
-                                            borderRadius: 8,
-                                            fontWeight: 600
-                                        }}
-                                    >
-                                        Créer l'intervention
-                                    </Button>
-                                </Space>
+                                <CheckCircleOutlined />
+                                Technicien sélectionné : {nomTechChoisi}
                             </div>
-                        </Form>
+                        )}
                     </div>
-                )}
+
+                    {/* ── Boutons ── */}
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        gap: 12
+                    }}>
+                        <Button
+                            style={{ borderRadius: 8 }}
+                            onClick={reinitialiserModal}
+                        >
+                            Annuler
+                        </Button>
+                        <Button
+                            type="primary"
+                            htmlType="submit"
+                            icon={<PlusOutlined />}
+                            style={{
+                                background: '#FF8C00',
+                                borderColor: '#FF8C00',
+                                borderRadius: 8,
+                                fontWeight: 600
+                            }}
+                        >
+                            Créer l'intervention
+                        </Button>
+                    </div>
+                </Form>
             </Modal>
 
             {/* ─── MODAL CHANGER STATUT ─── */}
@@ -1191,7 +1537,7 @@ const Interventions = () => {
                         </p>
                         <p style={{ color: '#666' }}>
                             Statut actuel :
-                            <Tag color={couleurStatut[interventionSelectionnee.statut]}
+                            <Tag color={COULEUR_STATUT[interventionSelectionnee.statut]}
                                  style={{ marginLeft: 8 }}>
                                 {interventionSelectionnee.statut?.toUpperCase()}
                             </Tag>
@@ -1204,7 +1550,7 @@ const Interventions = () => {
                         <Select placeholder="Choisir le nouveau statut">
                             {transitions.map(t => (
                                 <Option key={t} value={t}>
-                                    <Tag color={couleurStatut[t]}>{t.toUpperCase()}</Tag>
+                                    <Tag color={COULEUR_STATUT[t]}>{t.toUpperCase()}</Tag>
                                 </Option>
                             ))}
                         </Select>
@@ -1442,7 +1788,7 @@ const Interventions = () => {
                     <div>
                         <Descriptions column={1} bordered size="small">
                             <Descriptions.Item label="Statut">
-                                <Tag color={couleurStatut[interventionSelectionnee.statut]}>
+                                <Tag color={COULEUR_STATUT[interventionSelectionnee.statut]}>
                                     {interventionSelectionnee.statut?.toUpperCase()}
                                 </Tag>
                             </Descriptions.Item>
@@ -1464,7 +1810,7 @@ const Interventions = () => {
                                 {interventionSelectionnee.technicien?.nom || 'Non assigné'}
                             </Descriptions.Item>
                             <Descriptions.Item label="Type">
-                                {typesService[interventionSelectionnee.type_service]}
+                                {TYPES_SERVICE[interventionSelectionnee.type_service]}
                             </Descriptions.Item>
                             <Descriptions.Item label="Urgence">
                                 {interventionSelectionnee.urgence?.toUpperCase()}

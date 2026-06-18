@@ -1476,44 +1476,178 @@ class ListePiecesUtiliseesView(APIView):
         })
     # ─── DIAGNOSTIC IA ───
 class DiagnosticIAView(APIView):
+    """
+    POST /api/diagnostic/analyser/
+
+    Analyse la description d'une panne
+    et retourne :
+    - categorie
+    - type_service
+    - urgence
+    - origine_probleme
+    - specialite_requise
+    - solution proposée        ← NOUVEAU
+    - duree estimée            ← NOUVEAU
+    - prevention               ← NOUVEAU
+    - pieces_suggerees
+    - technicien_recommande    ← NOUVEAU
+    - tous_techniciens classés ← NOUVEAU
+    - confiance
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+
         description = request.data.get(
             'description', '').strip()
 
-        if len(description) < 10:
+        # ── Validation ──
+        if not description:
             return Response({
-                'erreur': 'Description trop courte'
+                'erreur':
+                    'La description est obligatoire'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        techniciens = list(
-            Technicien.objects
-            .filter(disponible=True)
-            .values('id', 'nom', 'specialite',
-                    'disponible', 'tarif_horaire')
+        if len(description) < 5:
+            return Response({
+                'erreur':
+                    'Description trop courte. '
+                    'Minimum 5 caractères.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # ── Importer le predictor ──
+        try:
+            from .ml.predictor import (
+                predire, MODELES_OK)
+        except ImportError as e:
+            return Response({
+                'erreur':
+                    f'Module NLP non disponible : '
+                    f'{str(e)}'
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        if not MODELES_OK:
+            return Response({
+                'erreur':
+                    'Modèles IA non entraînés. '
+                    'Contactez l\'administrateur.',
+                'commande':
+                    'python interventions/ml/'
+                    'train_models.py'
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        # ── Récupérer tous les techniciens ──
+        try:
+            techniciens = Technicien.objects\
+                .all()\
+                .select_related('user')
+
+            techniciens_info = []
+            for t in techniciens:
+                techniciens_info.append({
+                    'id':           t.id,
+                    'nom':          t.nom,
+                    'specialite':   t.specialite,
+                    'disponible':   t.disponible,
+                    'tarif_horaire': float(
+                        t.tarif_horaire or 0),
+                    'telephone':
+                        t.telephone or '',
+                })
+        except Exception as e:
+            techniciens_info = []
+
+        # ── Lancer la prédiction ──
+        resultat = predire(
+            description=description,
+            techniciens_disponibles=techniciens_info
         )
 
-        try:
-            from ml.predictor import predire
-            resultat = predire(description, techniciens)
+        if not resultat.get('succes'):
+            return Response({
+                'erreur': resultat.get(
+                    'erreur',
+                    'Erreur interne NLP')
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            if 'erreur' in resultat:
-                return Response(
-                    {'erreur': resultat['erreur']},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
+        # ── Enrichir avec interventions en cours ──
+        tous_techniciens_enrichis = []
+        for tech in resultat.get(
+                'tous_techniciens', []):
+            try:
+                nb_en_cours = \
+                    Intervention.objects.filter(
+                        technicien_id=tech['id'],
+                        statut__in=[
+                            'assigne',
+                            'en_cours',
+                            'attente_pieces'
+                        ]
+                    ).count()
 
-            return Response(
-                resultat,
-                status=status.HTTP_200_OK
-            )
+                if nb_en_cours >= 4:
+                    charge = 'Surchargé'
+                    charge_color = '#f5222d'
+                elif nb_en_cours >= 2:
+                    charge = 'Chargé'
+                    charge_color = '#fa8c16'
+                else:
+                    charge = 'Disponible'
+                    charge_color = '#52c41a'
 
-        except Exception as e:
-            return Response(
-                {'erreur': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+                tous_techniciens_enrichis.append({
+                    **tech,
+                    'interventions_en_cours':
+                        nb_en_cours,
+                    'charge':       charge,
+                    'charge_color': charge_color,
+                })
+            except Exception:
+                tous_techniciens_enrichis.append({
+                    **tech,
+                    'interventions_en_cours': 0,
+                    'charge':       'Inconnu',
+                    'charge_color': '#999',
+                })
+
+        # ── Construire la réponse ──
+        return Response({
+            'succes': True,
+            'diagnostic': {
+
+                # Prédictions de base
+                'categorie':
+                    resultat['categorie'],
+                'type_service':
+                    resultat['type_service'],
+                'urgence':
+                    resultat['urgence'],
+                'origine_probleme':
+                    resultat['origine_probleme'],
+                'specialite_requise':
+                    resultat['specialite_requise'],
+
+                # Nouveaux champs
+                'solution':
+                    resultat['solution'],
+                'duree':
+                    resultat['duree'],
+                'prevention':
+                    resultat['prevention'],
+                'pieces_suggerees':
+                    resultat['pieces_suggerees'],
+
+                # Technicien
+                'technicien_recommande':
+                    resultat['technicien_recommande'],
+                'tous_techniciens':
+                    tous_techniciens_enrichis,
+
+                # Confiance
+                'confiance':
+                    resultat['confiance'],
+            }
+        }, status=status.HTTP_200_OK)
         
 # ════════════════════════════════════════
 # VUE 1 — Ajouter une image

@@ -100,6 +100,10 @@ urlpatterns = [
      views.DiagnosticIAView.as_view(),
      name='diagnostic-ia'),
 
+      path('diagnostic/analyser/',
+         views.DiagnosticIAView.as_view(),
+         name='diagnostic-ia'),
+
      # ── Images ──
      path('interventions/<int:pk>/images/',
           views.ListeImagesView.as_view(),
