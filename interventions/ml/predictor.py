@@ -54,14 +54,6 @@ def _charger_solutions_map():
     """
     Charge le mapping (categorie, type_service)
     → solution, généré par generate_dataset.py.
-
-    ✅ La solution n'est PAS prédite par un
-    modèle ML : elle est dérivée directement
-    des prédictions categorie + type_service,
-    déjà fiables (~85% et ~82% de confiance),
-    ce qui garantit 100% de cohérence au lieu
-    de faire réapprendre cette relation à un
-    8ème modèle (qui plafonnait à ~45%).
     """
     chemin = os.path.join(
         ML_DIR, 'solutions_map.json')
@@ -70,11 +62,81 @@ def _charger_solutions_map():
     with open(chemin, 'r',
               encoding='utf-8') as f:
         data = json.load(f)
-    # Reconvertir les clés "cat|ts" en tuples
     return {
         tuple(k.split('|')): v
         for k, v in data.items()
     }
+
+
+# ══════════════════════════════════════════════════
+# RÈGLES MÉTIER PRIORITAIRES POUR L'URGENCE
+# ══════════════════════════════════════════════════
+# ✅ Approche hybride : certains mots-clés sont
+# des signaux métier absolus et fiables à 100%
+# (un agent qui tape "ransomware" veut une
+# urgence critique, indépendamment de ce que
+# le ML a statistiquement appris sur un dataset
+# synthétique forcément limité et déséquilibré).
+#
+# Le ML reste utilisé pour les cas où AUCUN
+# mot-clé fort n'est détecté (cas ambigus),
+# ce qui est la majorité des descriptions réelles.
+#
+# Cette approche combine la fiabilité des règles
+# expertes avec la flexibilité du ML, plutôt que
+# de forcer le ML à réapprendre des règles déjà
+# connues à partir d'un signal statistique faible.
+
+MOTS_CRITIQUE_ABSOLU = [
+    'ransomware', 'rançongiciel',
+    'ne démarre plus', 'ne fonctionne plus',
+    'données disparu', 'données perdu',
+    'serveur en panne', 'entreprise bloqué',
+    'entreprise totalement bloqué',
+    'activité bloqué', 'activité arrêté',
+    'formatage', 'infection',
+]
+
+MOTS_HAUTE_ABSOLU = [
+    'virus', 'surchauffe', 'très lent',
+    'instable', 'plante', 'écran bleu',
+]
+
+
+def _ajuster_urgence_par_motscles(
+        description_nettoyee,
+        urgence_predite,
+        proba_critique,
+        proba_haute):
+    """
+    Vérifie la présence de mots-clés métier
+    absolus dans la description. Si trouvés,
+    ils priment sur la prédiction ML si celle-ci
+    semble incohérente avec la gravité évidente
+    du texte (ex: "ransomware" → critique, même
+    si le ML a prédit faible/normale par manque
+    de signal statistique suffisant).
+
+    Retourne : (urgence_finale, ajustee: bool)
+    """
+    desc = description_nettoyee.lower()
+
+    # Mots critiques absolus présents ?
+    if any(m in desc
+           for m in MOTS_CRITIQUE_ABSOLU):
+        if urgence_predite not in (
+                'critique', 'haute'):
+            return 'critique', True
+        return urgence_predite, False
+
+    # Mots haute priorité absolus présents ?
+    if any(m in desc for m in MOTS_HAUTE_ABSOLU):
+        if urgence_predite not in (
+                'haute', 'critique'):
+            return 'haute', True
+        return urgence_predite, False
+
+    return urgence_predite, False
 
 
 try:
@@ -438,6 +500,32 @@ def predire(
         .predict([desc])[0]
     urgence      = MODELES['urgence']\
         .predict([desc])[0]
+
+    # ✅ Ajustement hybride : si un mot-clé
+    # métier absolu (ransomware, etc.) est
+    # présent mais que le ML a prédit une
+    # urgence trop faible (signal statistique
+    # insuffisant dans un dataset synthétique
+    # forcément limité), on corrige avec la
+    # règle métier qui est fiable à 100%.
+    proba_urg_brut = MODELES['urgence']\
+        .predict_proba([desc])[0]
+    classes_urg = list(
+        MODELES['urgence'].classes_)
+
+    def _proba_classe(label):
+        if label in classes_urg:
+            return float(proba_urg_brut[
+                classes_urg.index(label)])
+        return 0.0
+
+    urgence_ajustee, fut_ajustee = \
+        _ajuster_urgence_par_motscles(
+            desc, urgence,
+            _proba_classe('critique'),
+            _proba_classe('haute')
+        )
+    urgence = urgence_ajustee
     origine      = MODELES['origine']\
         .predict([desc])[0]
     specialite   = MODELES['specialite']\
@@ -475,7 +563,16 @@ def predire(
                              categorie)
     conf_type_service = conf('type_service',
                              type_service)
-    conf_urgence      = conf('urgence', urgence)
+    conf_urgence = conf('urgence', urgence)
+
+    # ✅ Si la règle métier a corrigé l'urgence,
+    # on affiche une confiance élevée fixe (95%)
+    # car la règle est déterministe et fiable,
+    # plutôt que la confiance ML (qui serait
+    # trompeuse puisqu'elle correspond à la
+    # classe que le ML avait prédite à tort)
+    if fut_ajustee:
+        conf_urgence = 95.0
     conf_specialite   = conf('specialite',
                              specialite)
 
