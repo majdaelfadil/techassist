@@ -18,6 +18,15 @@ import joblib
 import re
 import os
 import json
+import sys
+
+# Windows : la console par défaut (cp1252) ne sait pas encoder les emojis des
+# prints ci-dessous → on force UTF-8 pour éviter un UnicodeEncodeError au chargement.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 
 ML_DIR = os.path.dirname(
     os.path.abspath(__file__))
