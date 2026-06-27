@@ -3,7 +3,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import (
     IsAuthenticated, BasePermission)
-from django.db.models import Count, F
+from django.db.models import Count, F, Sum
+from django.contrib.auth.models import User
 from django.utils import timezone
 from django.http import HttpResponse
 from django.db import transaction, IntegrityError
@@ -42,21 +43,32 @@ import cloudinary.uploader
 # ─── PERMISSIONS ───
 # ════════════════════════════════
 
-class EstResponsable(BasePermission):
+class EstAdmin(BasePermission):
+    """Administrateur : gestion des utilisateurs + statistiques système."""
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
         if not hasattr(request.user, 'profil'):
             return True
-        return request.user.profil.role == 'responsable'
+        return request.user.profil.role == 'admin'
+
+class EstResponsable(BasePermission):
+    """Responsable et Admin = accès opérationnel complet."""
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        if not hasattr(request.user, 'profil'):
+            return True
+        return request.user.profil.role in ['responsable', 'admin']
 
 class EstAgent(BasePermission):
+    """Agent + Responsable + Admin."""
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
         if not hasattr(request.user, 'profil'):
             return True
-        return request.user.profil.role == 'agent'
+        return request.user.profil.role in ['agent', 'responsable', 'admin']
 
 class EstAgentOuResponsable(BasePermission):
     def has_permission(self, request, view):
@@ -64,7 +76,7 @@ class EstAgentOuResponsable(BasePermission):
             return False
         if not hasattr(request.user, 'profil'):
             return True
-        return request.user.profil.role in ['agent', 'responsable']
+        return request.user.profil.role in ['agent', 'responsable', 'admin']
 
 class EstTechnicien(BasePermission):
     def has_permission(self, request, view):
@@ -1898,8 +1910,206 @@ class SupprimerImageView(APIView):
  
         # Supprimer en base
         image.delete()
- 
+
         return Response({
             'message':
                 'Image supprimée de Cloudinary'
         }, status=status.HTTP_200_OK)
+
+
+# ════════════════════════════════════════════════════
+# ─── ADMINISTRATION : GESTION DES UTILISATEURS ───
+# Réservé au rôle 'admin'
+# ════════════════════════════════════════════════════
+
+def _serialiser_utilisateur(user):
+    """Représentation unifiée d'un compte (User + profil + fiche liée)."""
+    role = user.profil.role if hasattr(user, 'profil') else 'admin'
+    nom = user.get_full_name() or user.username
+    telephone = ''
+    specialite = None
+    fiche_id = None
+    if role == 'technicien':
+        tech = Technicien.objects.filter(user=user).first()
+        if tech:
+            nom, telephone, specialite, fiche_id = (
+                tech.nom, tech.telephone, tech.specialite, tech.id)
+    elif role == 'agent':
+        agent = Agent.objects.filter(user=user).first()
+        if agent:
+            nom, telephone, fiche_id = agent.nom, agent.telephone, agent.id
+    return {
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'nom': nom,
+        'role': role,
+        'telephone': telephone,
+        'specialite': specialite,
+        'fiche_id': fiche_id,
+        'is_active': user.is_active,
+        'date_joined': user.date_joined,
+    }
+
+
+class GestionUtilisateursView(APIView):
+    """Liste / création de comptes utilisateurs (admin uniquement)."""
+    permission_classes = [EstAdmin]
+
+    def get(self, request):
+        users = User.objects.all().order_by('-date_joined')
+        return Response([_serialiser_utilisateur(u) for u in users])
+
+    def post(self, request):
+        d = request.data
+        username = (d.get('username') or '').strip()
+        password = d.get('password') or ''
+        role = d.get('role')
+        nom = (d.get('nom') or '').strip()
+
+        if not username or not password or role not in (
+                'admin', 'responsable', 'agent', 'technicien'):
+            return Response(
+                {'erreur': 'username, password et role valide requis'},
+                status=status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(username=username).exists():
+            return Response({'erreur': "Ce nom d'utilisateur existe déjà"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                parts = nom.split(' ', 1) if nom else ['', '']
+                user = User.objects.create_user(
+                    username=username, password=password,
+                    email=d.get('email', ''),
+                    first_name=parts[0],
+                    last_name=parts[1] if len(parts) > 1 else '')
+                ProfilUtilisateur.objects.create(user=user, role=role)
+
+                if role == 'technicien':
+                    Technicien.objects.create(
+                        user=user, nom=nom or username,
+                        specialite=d.get('specialite', 'hardware'),
+                        telephone=d.get('telephone', ''),
+                        competences=d.get('competences', ''),
+                        tarif_horaire=d.get('tarif_horaire') or 0)
+                elif role == 'agent':
+                    Agent.objects.create(
+                        user=user, nom=nom or username,
+                        telephone=d.get('telephone', ''))
+        except IntegrityError as e:
+            return Response({'erreur': str(e)},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(_serialiser_utilisateur(user),
+                        status=status.HTTP_201_CREATED)
+
+
+class GestionUtilisateurDetailView(APIView):
+    """Détail / modification / suppression d'un compte (admin uniquement)."""
+    permission_classes = [EstAdmin]
+
+    def get(self, request, pk):
+        user = User.objects.filter(pk=pk).first()
+        if not user:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(_serialiser_utilisateur(user))
+
+    def put(self, request, pk):
+        user = User.objects.filter(pk=pk).first()
+        if not user:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        d = request.data
+
+        if 'is_active' in d:
+            user.is_active = bool(d['is_active'])
+        if d.get('email') is not None:
+            user.email = d['email']
+        if d.get('password'):
+            user.set_password(d['password'])
+        nom = d.get('nom')
+        if nom:
+            parts = nom.split(' ', 1)
+            user.first_name = parts[0]
+            user.last_name = parts[1] if len(parts) > 1 else ''
+        user.save()
+
+        # rôle + fiche liée
+        role = d.get('role')
+        if role and hasattr(user, 'profil'):
+            user.profil.role = role
+            user.profil.save()
+
+        role = user.profil.role if hasattr(user, 'profil') else None
+        if role == 'technicien':
+            tech = Technicien.objects.filter(user=user).first()
+            if not tech:
+                tech = Technicien(user=user, tarif_horaire=0)
+            if nom:
+                tech.nom = nom
+            if d.get('telephone') is not None:
+                tech.telephone = d['telephone']
+            if d.get('specialite'):
+                tech.specialite = d['specialite']
+            if d.get('tarif_horaire') is not None:
+                tech.tarif_horaire = d['tarif_horaire']
+            if not tech.nom:
+                tech.nom = user.username
+            tech.save()
+        elif role == 'agent':
+            agent = Agent.objects.filter(user=user).first()
+            if not agent:
+                agent = Agent(user=user, nom=nom or user.username)
+            if nom:
+                agent.nom = nom
+            if d.get('telephone') is not None:
+                agent.telephone = d['telephone']
+            agent.save()
+
+        return Response(_serialiser_utilisateur(user))
+
+    def delete(self, request, pk):
+        user = User.objects.filter(pk=pk).first()
+        if not user:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        if user == request.user:
+            return Response(
+                {'erreur': 'Vous ne pouvez pas supprimer votre propre compte'},
+                status=status.HTTP_400_BAD_REQUEST)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AdminStatsView(APIView):
+    """Statistiques système pour le tableau de bord administrateur."""
+    permission_classes = [EstAdmin]
+
+    def get(self, request):
+        roles = (ProfilUtilisateur.objects
+                 .values('role').annotate(count=Count('id')))
+        interventions = Intervention.objects.all()
+        ca = Facture.objects.aggregate(total=Sum('total_ttc'))['total'] or 0
+
+        return Response({
+            'utilisateurs': {
+                'total': User.objects.count(),
+                'actifs': User.objects.filter(is_active=True).count(),
+                'par_role': {r['role']: r['count'] for r in roles},
+            },
+            'interventions': {
+                'total': interventions.count(),
+                'en_cours': interventions.filter(statut='en_cours').count(),
+                'terminees': interventions.filter(statut='termine').count(),
+                'par_statut': list(
+                    interventions.values('statut').annotate(count=Count('id'))),
+            },
+            'ressources': {
+                'techniciens': Technicien.objects.count(),
+                'techniciens_disponibles':
+                    Technicien.objects.filter(disponible=True).count(),
+                'clients': Client.objects.count(),
+                'pieces_rupture': Piece.objects.filter(
+                    quantite_stock__lte=F('seuil_minimum')).count(),
+            },
+            'chiffre_affaires': float(ca),
+        })

@@ -16,6 +16,7 @@ import Clients from './pages/Clients';
 import MesRapports from './pages/MesRapports';
 import Rapports from './pages/Rapports';
 import Appareils from './pages/Appareils';
+import Administration from './pages/Administration';
 
 const ProtectedRoute = ({ children, roles }) => {
     if (!authService.isAuthenticated()) {
@@ -57,11 +58,18 @@ function App() {
                     }
                 />
 
+                {/* Administration — rôle admin uniquement */}
+                <Route path="/admin" element={
+                    <ProtectedRoute roles={['admin']}>
+                        <Administration />
+                    </ProtectedRoute>
+                } />
+
                 <Route
                     path="/planning"
                     element={
                         <ProtectedRoute
-                            roles={['technicien','responsable']}>
+                            roles={['technicien','responsable','admin']}>
                             <Planning />
                         </ProtectedRoute>
                     }
@@ -70,7 +78,7 @@ function App() {
                     path="/techniciens"
                     element={
                         <ProtectedRoute
-                            roles={['responsable']}>
+                            roles={['responsable','admin']}>
                             <Techniciens />
                         </ProtectedRoute>
                     }
@@ -80,13 +88,13 @@ function App() {
                     element={
                         <ProtectedRoute
                             roles={['responsable',
-                                'technicien','agent']}>
+                                'technicien','admin']}>
                             <Pieces />
                         </ProtectedRoute>
                     }
                 />
                 <Route path="/factures" element={
-                    <ProtectedRoute roles={['agent']}>
+                    <ProtectedRoute roles={['agent','admin']}>
                         <Factures />
                     </ProtectedRoute>
                 } />
@@ -94,11 +102,16 @@ function App() {
                     path="/clients"
                     element={
                         <ProtectedRoute
-                            roles={['agent']}>
+                            roles={['agent','admin']}>
                             <Clients />
                         </ProtectedRoute>
                     }
                 />
+                <Route path="/appareils" element={
+                    <ProtectedRoute roles={['agent','admin']}>
+                        <Appareils />
+                    </ProtectedRoute>
+                } />
 
                 <Route path="/mes-rapports" element={
                     <ProtectedRoute roles={['technicien']}>
@@ -106,7 +119,7 @@ function App() {
                     </ProtectedRoute>
                 } />
                  <Route path="/rapports" element={
-                    <ProtectedRoute roles={['responsable']}>
+                    <ProtectedRoute roles={['responsable','admin']}>
                         <Rapports />
                     </ProtectedRoute>
                 } />
@@ -122,11 +135,6 @@ function App() {
                         <Navigate to="/dashboard" />
                     }
                 />
-                <Route path="/appareils" element={
-                    <ProtectedRoute roles={['agent']}>
-                        <Appareils />
-                    </ProtectedRoute>
-                } />
             </Routes>
         </BrowserRouter>
     );

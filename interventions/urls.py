@@ -85,6 +85,11 @@ urlpatterns = [
     # ── Dashboard ──
     path('dashboard/stats/', views.DashboardStatsView.as_view()),
 
+    # ── Administration (rôle admin) ──
+    path('admin/utilisateurs/', views.GestionUtilisateursView.as_view()),
+    path('admin/utilisateurs/<int:pk>/', views.GestionUtilisateurDetailView.as_view()),
+    path('admin/stats/', views.AdminStatsView.as_view()),
+
     # ── Profil ──
     path('auth/profil/', views.MonProfilView.as_view()),
 

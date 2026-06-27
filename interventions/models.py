@@ -71,6 +71,7 @@ class Agent(models.Model):
 # ─── PROFIL UTILISATEUR ───
 class ProfilUtilisateur(models.Model):
     ROLE_CHOICES = [
+        ('admin', 'Administrateur'),
         ('responsable', 'Responsable'),
         ('agent', 'Agent d\'accueil'),
         ('technicien', 'Technicien'),

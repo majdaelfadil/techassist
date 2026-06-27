@@ -7,7 +7,8 @@ import {
     AppstoreOutlined, FileTextOutlined,
     LogoutOutlined, BellOutlined,
     MenuFoldOutlined, MenuUnfoldOutlined,
-    CalendarOutlined, CustomerServiceOutlined, LaptopOutlined
+    CalendarOutlined, CustomerServiceOutlined, LaptopOutlined,
+    SettingOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation }
     from 'react-router-dom';
@@ -24,54 +25,61 @@ const AppLayout = ({ children }) => {
 
     // Configuration des menus par rôle
     const getMenuItems = () => {
-        // Menu de base commun à tous
-        const baseItems = [
-            {
-                key: '/dashboard',
-                icon: <DashboardOutlined />,
-                label: 'Dashboard',
-            },
-        ];
-        
-        // Ajouter les items spécifiques selon le rôle
+        const dashboard = { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' };
+        const interventions = { key: '/interventions', icon: <ToolOutlined />, label: 'Interventions' };
+        const clients = { key: '/clients', icon: <CustomerServiceOutlined />, label: 'Clients' };
+        const appareils = { key: '/appareils', icon: <LaptopOutlined />, label: 'Appareils' };
+        const pieces = { key: '/pieces', icon: <AppstoreOutlined />, label: 'Stock Pièces' };
+        const factures = { key: '/factures', icon: <FileTextOutlined />, label: 'Factures' };
+        const techniciens = { key: '/techniciens', icon: <TeamOutlined />, label: 'Techniciens' };
+        const planning = { key: '/planning', icon: <CalendarOutlined />, label: 'Planning' };
+        const rapports = { key: '/rapports', icon: <FileTextOutlined />, label: 'Rapports' };
+
+        if (role === 'admin') {
+            return [
+                dashboard,
+                { key: '/admin', icon: <SettingOutlined />, label: 'Administration' },
+                interventions, clients, appareils, pieces, factures,
+                techniciens, planning, rapports,
+            ];
+        }
+        if (role === 'responsable') {
+            // Supervision : interventions, planning, techniciens, pièces, rapports
+            return [
+                dashboard, interventions, planning, techniciens, pieces, rapports,
+            ];
+        }
         if (role === 'agent') {
-            baseItems.push(
-                { key: '/clients', icon: <CustomerServiceOutlined />, label: 'Clients' },
-                { key: '/appareils', icon: <LaptopOutlined />, label: 'Appareils' },
-                { key: '/interventions', icon: <ToolOutlined />, label: 'Interventions' },
-                { key: '/pieces', icon: <AppstoreOutlined />, label: 'Stock Pièces' },
-                { key: '/factures', icon: <FileTextOutlined />, label: 'Factures' }
-            );
-        } else if (role === 'responsable') {
-            // ✅ Responsable : Dashboard, Interventions, Techniciens, Rapports, Stock Pièces
-            baseItems.push(
-                { key: '/interventions', icon: <ToolOutlined />, label: 'Interventions' },
-                { key: '/pieces', icon: <AppstoreOutlined />, label: 'Stock Pièces' },
-                { key: '/techniciens', icon: <TeamOutlined />, label: 'Techniciens' },
-                { key: '/rapports', icon: <FileTextOutlined />, label: 'Rapports' }
-                // ❌ Pas de Clients
-                // ❌ Pas d'Agents
-                // ❌ Pas de Factures
-                // ❌ Pas de Planning
-            );
-        } else if (role === 'technicien') {
-            baseItems.push(
+            // Accueil : interventions, clients, appareils, factures
+            return [
+                dashboard, interventions, clients, appareils, factures,
+            ];
+        }
+        if (role === 'technicien') {
+            return [
+                dashboard,
                 { key: '/interventions', icon: <ToolOutlined />, label: 'Mes Interventions' },
                 { key: '/planning', icon: <CalendarOutlined />, label: 'Mon Planning' },
                 { key: '/pieces', icon: <AppstoreOutlined />, label: 'Pièces' },
-                { key: '/mes-rapports', icon: <FileTextOutlined />, label: 'Mes Rapports' }
-            );
+                { key: '/mes-rapports', icon: <FileTextOutlined />, label: 'Mes Rapports' },
+            ];
         }
-        
-        return baseItems;
+        return [dashboard];
     };
 
     const menuItems = getMenuItems();
 
     const couleurRole = {
+        'admin':       '#722ed1',
         'responsable': '#FF8C00',
         'agent':       '#1890ff',
         'technicien':  '#52c41a'
+    };
+    const labelRole = {
+        'admin': 'Administrateur',
+        'responsable': 'Responsable',
+        'agent': 'Agent',
+        'technicien': 'Technicien'
     };
 
     const userMenu = {
@@ -156,8 +164,7 @@ const AppLayout = ({ children }) => {
                             color: couleurRole[role],
                             background: `${couleurRole[role]}22`
                         }}>
-                            {role === 'responsable' ? 'RESPONSABLE' : 
-                             role === 'agent' ? 'AGENT' : 'TECHNICIEN'}
+                            {(labelRole[role] || role).toUpperCase()}
                         </span>
                     </div>
                 )}
@@ -247,8 +254,7 @@ const AppLayout = ({ children }) => {
                                         fontSize: 11,
                                         color: couleurRole[role]
                                     }}>
-                                        {role === 'responsable' ? 'Responsable' : 
-                                         role === 'agent' ? 'Agent' : 'Technicien'}
+                                        {labelRole[role] || role}
                                     </div>
                                 </div>
                             </div>

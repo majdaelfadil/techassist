@@ -16,6 +16,15 @@ db.sqlite3
 
 # Variables secrètes
 .env
+/env
+scraping/.env
+
+# Node modules (frontend a son propre .gitignore ; couvre scraping/)
+node_modules/
+
+# Données scrapées volumineuses (régénérables par le pipeline)
+scraping/data/
+scraping/node_modules/
 
 # VS Code
 .vscode/

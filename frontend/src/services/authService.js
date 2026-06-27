@@ -54,13 +54,17 @@ const authService = {
                || 'Utilisateur';
     },
 
+    isAdmin: () => {
+        return authService.getRole() === 'admin';
+    },
+
     isResponsable: () => {
-        return authService.getRole() ===
-               'responsable';
+        return ['responsable', 'admin'].includes(
+            authService.getRole());
     },
 
     isAgent: () => {
-        return ['agent', 'responsable'].includes(
+        return ['agent', 'responsable', 'admin'].includes(
             authService.getRole());
     },
 
