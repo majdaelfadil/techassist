@@ -67,7 +67,7 @@ export const STACK_EXCHANGE_TAGS = [
 ] as const;
 
 export const config = {
-  // Grok API (replaces Claude)
+  // Grok API (x.ai)
   grokApiKey: process.env.GROK_API_KEY || '',
   grokModel: process.env.GROK_MODEL || 'grok-3-mini',
   grokBaseUrl: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
