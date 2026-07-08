@@ -130,6 +130,50 @@ class TechnicienListView(generics.ListCreateAPIView):
             queryset = queryset.filter(disponible=True)
         return queryset
 
+    def create(self, request, *args, **kwargs):
+        # Un technicien doit avoir un compte User pour pouvoir se connecter.
+        # On crée donc User + ProfilUtilisateur(role='technicien') + Technicien
+        # dans une seule transaction (même logique que la création par l'admin).
+        d = request.data
+        username = (d.get('username') or '').strip()
+        password = d.get('password') or ''
+        nom = (d.get('nom') or '').strip()
+
+        if not username or not password:
+            return Response(
+                {'erreur': "Identifiant et mot de passe obligatoires "
+                           "pour que le technicien puisse se connecter"},
+                status=status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(username=username).exists():
+            return Response(
+                {'erreur': "Ce nom d'utilisateur existe déjà"},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                parts = nom.split(' ', 1) if nom else ['', '']
+                user = User.objects.create_user(
+                    username=username, password=password,
+                    email=d.get('email', ''),
+                    first_name=parts[0],
+                    last_name=parts[1] if len(parts) > 1 else '')
+                ProfilUtilisateur.objects.create(
+                    user=user, role='technicien')
+                tech = Technicien.objects.create(
+                    user=user, nom=nom or username,
+                    specialite=d.get('specialite', 'hardware'),
+                    telephone=d.get('telephone', ''),
+                    competences=d.get('competences', ''),
+                    tarif_horaire=d.get('tarif_horaire') or 0,
+                    disponible=d.get('disponible', True))
+        except IntegrityError as e:
+            return Response({'erreur': str(e)},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(tech)
+        return Response(serializer.data,
+                        status=status.HTTP_201_CREATED)
+
 class TechnicienDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Technicien.objects.all()
     serializer_class = TechnicienSerializer
@@ -240,6 +284,58 @@ class PieceDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ─── INTERVENTIONS ───
 # ════════════════════════════════
 
+def enregistrer_diagnostic_ia(intervention, diag):
+    """Enregistre (ou met à jour) le diagnostic IA d'une intervention
+    dans la table interventions_diagnosticia.
+
+    `diag` est le dictionnaire produit par le predictor / renvoyé au
+    frontend. On extrait les champs de façon défensive car la forme
+    exacte peut varier (confiance = dict ou nombre, pièces = liste
+    d'objets ou de chaînes, etc.)."""
+    if not isinstance(diag, dict):
+        return None
+
+    # ── pièces suggérées → texte ──
+    pieces = diag.get('pieces_suggerees') or []
+    if isinstance(pieces, list):
+        noms = []
+        for p in pieces:
+            if isinstance(p, dict):
+                noms.append(str(p.get('nom') or p.get('piece') or p))
+            else:
+                noms.append(str(p))
+        pieces_txt = ', '.join(n for n in noms if n)
+    else:
+        pieces_txt = str(pieces)
+
+    # ── confiance → score global ──
+    conf = diag.get('confiance')
+    score = conf.get('globale') if isinstance(conf, dict) else conf
+    try:
+        score = round(float(score), 2) if score is not None else None
+    except (TypeError, ValueError):
+        score = None
+
+    # ── durée estimée ──
+    try:
+        duree = diag.get('duree')
+        duree = round(float(duree), 2) if duree is not None else None
+    except (TypeError, ValueError):
+        duree = None
+
+    diagnostic, _ = DiagnosticIA.objects.update_or_create(
+        intervention=intervention,
+        defaults={
+            'description_entree': intervention.description or '',
+            'categorie_panne': (diag.get('categorie') or '')[:100],
+            'causes_probables': diag.get('origine_probleme') or '',
+            'pieces_suggerees': pieces_txt,
+            'duree_estimee': duree,
+            'score_confiance': score,
+        })
+    return diagnostic
+
+
 class InterventionListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
@@ -280,7 +376,17 @@ class InterventionListCreateView(generics.ListCreateAPIView):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        intervention = serializer.save(created_by=self.request.user)
+        # Si le frontend a joint le diagnostic IA (généré avant la création),
+        # on le persiste dans interventions_diagnosticia, lié à l'intervention.
+        diag = self.request.data.get('diagnostic')
+        if diag:
+            try:
+                enregistrer_diagnostic_ia(intervention, diag)
+            except Exception:
+                # La création d'intervention ne doit jamais échouer à cause
+                # d'un problème d'enregistrement du diagnostic.
+                pass
 
 class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Intervention.objects.all()
@@ -1512,6 +1618,9 @@ class DiagnosticIAView(APIView):
 
         description = request.data.get(
             'description', '').strip()
+        # Optionnel : si fourni, le diagnostic sera enregistré
+        # dans interventions_diagnosticia pour cette intervention.
+        intervention_id = request.data.get('intervention_id')
 
         # ── Validation ──
         if not description:
@@ -1623,42 +1732,57 @@ class DiagnosticIAView(APIView):
                 })
 
         # ── Construire la réponse ──
+        diagnostic_data = {
+
+            # Prédictions de base
+            'categorie':
+                resultat['categorie'],
+            'type_service':
+                resultat['type_service'],
+            'urgence':
+                resultat['urgence'],
+            'origine_probleme':
+                resultat['origine_probleme'],
+            'specialite_requise':
+                resultat['specialite_requise'],
+
+            # Nouveaux champs
+            'solution':
+                resultat['solution'],
+            'duree':
+                resultat['duree'],
+            'prevention':
+                resultat['prevention'],
+            'pieces_suggerees':
+                resultat['pieces_suggerees'],
+
+            # Technicien
+            'technicien_recommande':
+                resultat['technicien_recommande'],
+            'tous_techniciens':
+                tous_techniciens_enrichis,
+
+            # Confiance
+            'confiance':
+                resultat['confiance'],
+        }
+
+        # ── Journaliser dans interventions_diagnosticia (si lié) ──
+        enregistre = False
+        if intervention_id:
+            try:
+                intervention = Intervention.objects.get(pk=intervention_id)
+                enregistrer_diagnostic_ia(intervention, diagnostic_data)
+                enregistre = True
+            except Intervention.DoesNotExist:
+                pass
+            except Exception:
+                pass
+
         return Response({
             'succes': True,
-            'diagnostic': {
-
-                # Prédictions de base
-                'categorie':
-                    resultat['categorie'],
-                'type_service':
-                    resultat['type_service'],
-                'urgence':
-                    resultat['urgence'],
-                'origine_probleme':
-                    resultat['origine_probleme'],
-                'specialite_requise':
-                    resultat['specialite_requise'],
-
-                # Nouveaux champs
-                'solution':
-                    resultat['solution'],
-                'duree':
-                    resultat['duree'],
-                'prevention':
-                    resultat['prevention'],
-                'pieces_suggerees':
-                    resultat['pieces_suggerees'],
-
-                # Technicien
-                'technicien_recommande':
-                    resultat['technicien_recommande'],
-                'tous_techniciens':
-                    tous_techniciens_enrichis,
-
-                # Confiance
-                'confiance':
-                    resultat['confiance'],
-            }
+            'enregistre': enregistre,
+            'diagnostic': diagnostic_data,
         }, status=status.HTTP_200_OK)
         
 # ════════════════════════════════════════

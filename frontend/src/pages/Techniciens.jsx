@@ -543,9 +543,11 @@ const Techniciens = () => {
     const creerTechnicien = async (values) => {
         try {
             await api.post('/techniciens/', values);
-            message.success('Technicien créé !');
+            message.success('Technicien créé ! Il peut se connecter avec l\'identifiant et le mot de passe définis.');
             setModalCreer(false); form.resetFields(); chargerTechniciens();
-        } catch { message.error('Erreur création'); }
+        } catch (e) {
+            message.error(e?.response?.data?.erreur || 'Erreur création');
+        }
     };
 
     const modifierTechnicien = async (values) => {
@@ -573,7 +575,7 @@ const Techniciens = () => {
         t.telephone?.includes(search)
     );
 
-    const FormulaireTechnicien = ({ form, onFinish }) => (
+    const FormulaireTechnicien = ({ form, onFinish, avecIdentifiants = false }) => (
         <Form form={form} layout="vertical" onFinish={onFinish} style={{ marginTop: 16 }}>
             <Space style={{ width: '100%' }} size={12}>
                 <Form.Item label="Nom complet" name="nom" rules={[{ required: true, message: 'Nom obligatoire' }]} style={{ flex: 1 }}>
@@ -583,6 +585,16 @@ const Techniciens = () => {
                     <Input placeholder="0612345678" style={{ borderRadius: 8 }} />
                 </Form.Item>
             </Space>
+            {avecIdentifiants && (
+                <Space style={{ width: '100%' }} size={12}>
+                    <Form.Item label="Identifiant de connexion" name="username" rules={[{ required: true, message: 'Identifiant obligatoire' }]} style={{ flex: 1 }}>
+                        <Input placeholder="ahmed.alami" autoComplete="off" style={{ borderRadius: 8 }} />
+                    </Form.Item>
+                    <Form.Item label="Mot de passe" name="password" rules={[{ required: true, message: 'Mot de passe obligatoire' }, { min: 6, message: 'Au moins 6 caractères' }]} style={{ flex: 1 }}>
+                        <Input.Password placeholder="••••••" autoComplete="new-password" style={{ borderRadius: 8 }} />
+                    </Form.Item>
+                </Space>
+            )}
             <Space style={{ width: '100%' }} size={12}>
                 <Form.Item label="Spécialité" name="specialite" rules={[{ required: true, message: 'Spécialité obligatoire' }]} style={{ flex: 1 }}>
                     <Select placeholder="Choisir spécialité">
@@ -711,7 +723,7 @@ const Techniciens = () => {
 
             <Modal title={<span style={{ fontWeight: 700 }}>➕ Nouveau technicien</span>}
                 open={modalCreer} onCancel={() => { setModalCreer(false); form.resetFields(); }} footer={null} width={560}>
-                <FormulaireTechnicien form={form} onFinish={creerTechnicien} />
+                <FormulaireTechnicien form={form} onFinish={creerTechnicien} avecIdentifiants />
             </Modal>
 
             <Modal title={<span style={{ fontWeight: 700 }}>✏️ Modifier technicien</span>}

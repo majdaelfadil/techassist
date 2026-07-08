@@ -845,6 +845,9 @@ const Interventions = () => {
             const data = {
                 ...values,
                 technicien_id: technicienChoisi,
+                // Joint le diagnostic IA (s'il a été généré) pour qu'il soit
+                // enregistré dans interventions_diagnosticia côté serveur.
+                diagnostic: diagnostic || undefined,
             };
             await api.post('/interventions/', data);
             message.success('✅ Intervention créée !');
