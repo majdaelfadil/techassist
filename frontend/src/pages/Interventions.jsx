@@ -15,6 +15,7 @@ import {
     SafetyOutlined, ShoppingOutlined, ClockCircleOutlined
 } from '@ant-design/icons';
 import api from '../services/api';
+import authService from '../services/authService';
 import GestionImages from '../components/GestionImages';
 
 const { Option } = Select;
@@ -673,6 +674,10 @@ const ResultatDiagnostic = ({
 // ══════════════════════════════════════════════════
 
 const Interventions = () => {
+    // L'agent est en LECTURE SEULE : il consulte les interventions
+    // mais ne peut ni en créer, ni les modifier/assigner/supprimer/valider.
+    const lectureSeule = authService.getRole() === 'agent';
+
     // États existants
     const [interventions, setInterventions] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -1064,11 +1069,14 @@ const Interventions = () => {
                             style={{ color: '#FF8C00' }}
                             onClick={() => ouvrirDetail(record)} />
                     </Tooltip>
+                    {!lectureSeule && (
                     <Tooltip title="Changer statut">
                         <Button type="text" icon={<SwapOutlined />}
                             style={{ color: '#722ed1' }}
                             onClick={() => ouvrirModalStatut(record)} />
                     </Tooltip>
+                    )}
+                    {!lectureSeule && (
                     <Tooltip title="Assigner technicien">
                         <Button type="text" icon={<UserAddOutlined />}
                             style={{ color: '#1890ff' }}
@@ -1077,7 +1085,8 @@ const Interventions = () => {
                                 setModalAssigner(true);
                             }} />
                     </Tooltip>
-                    {record.statut === 'termine' && (
+                    )}
+                    {!lectureSeule && record.statut === 'termine' && (
                         <Tooltip title="Valider et générer facture">
                             <Button
                                 type="primary"
@@ -1097,6 +1106,7 @@ const Interventions = () => {
                             </Button>
                         </Tooltip>
                     )}
+                    {!lectureSeule && (
                     <Tooltip title="Supprimer">
                         <Popconfirm
                             title="Supprimer cette intervention ?"
@@ -1109,6 +1119,7 @@ const Interventions = () => {
                                 style={{ color: '#f5222d' }} />
                         </Popconfirm>
                     </Tooltip>
+                    )}
                 </Space>
             )
         },
@@ -1143,6 +1154,7 @@ const Interventions = () => {
                         style={{ borderRadius: 10 }}>
                         Actualiser
                     </Button>
+                    {!lectureSeule && (
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
@@ -1163,6 +1175,7 @@ const Interventions = () => {
                     >
                         Nouvelle intervention
                     </Button>
+                    )}
                 </Space>
             </div>
 

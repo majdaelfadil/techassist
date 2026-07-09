@@ -339,8 +339,11 @@ def enregistrer_diagnostic_ia(intervention, diag):
 class InterventionListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
+        # L'agent est en LECTURE SEULE sur les interventions :
+        # il peut les consulter (GET) mais pas en créer (POST réservé
+        # au responsable / admin).
         if self.request.method == 'POST':
-            return [EstAgent()]
+            return [EstResponsable()]
         return [IsAuthenticated()]
 
     def get_serializer_class(self):

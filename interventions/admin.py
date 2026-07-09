@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import (Client, Technicien, Agent,
+from .models import (Client, Technicien, Agent, Responsable,
                      ProfilUtilisateur, Appareil,
                      Piece, Intervention, PieceUtilisee,
                      DiagnosticIA, Rapport, Facture)
@@ -20,6 +20,12 @@ class TechnicienAdmin(admin.ModelAdmin):
 
 @admin.register(Agent)
 class AgentAdmin(admin.ModelAdmin):
+    list_display = ['nom', 'telephone',
+                    'user', 'date_creation']
+    search_fields = ['nom', 'telephone']
+
+@admin.register(Responsable)
+class ResponsableAdmin(admin.ModelAdmin):
     list_display = ['nom', 'telephone',
                     'user', 'date_creation']
     search_fields = ['nom', 'telephone']

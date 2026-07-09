@@ -213,7 +213,8 @@ class InterventionWorkflowTests(BaseAPITest):
         self.cli = Client.objects.create(nom='CliW', telephone='0633333333')
 
     def _creer_intervention(self):
-        return self.as_(self.agent).post('/api/interventions/', {
+        # Le responsable crée les interventions (l'agent est en lecture seule).
+        return self.as_(self.resp).post('/api/interventions/', {
             'client_id': self.cli.id,
             'description': 'PC ne démarre pas',
             'type_service': 'reparation',
@@ -221,10 +222,27 @@ class InterventionWorkflowTests(BaseAPITest):
             'urgence': 'normale',
         })
 
-    def test_agent_cree_intervention(self):
+    def test_responsable_cree_intervention(self):
         r = self._creer_intervention()
         self.assertEqual(r.status_code, 201, r.data)
         self.assertTrue(r.data['numero'].startswith('INT/'))
+
+    def test_agent_ne_peut_pas_creer_intervention(self):
+        # L'agent est en LECTURE SEULE : création interdite (403).
+        r = self.as_(self.agent).post('/api/interventions/', {
+            'client_id': self.cli.id,
+            'description': 'Test agent',
+            'type_service': 'reparation',
+            'canal_entree': 'telephone',
+        })
+        self.assertEqual(r.status_code, 403)
+
+    def test_agent_peut_consulter_interventions(self):
+        # ... mais il peut toujours les CONSULTER (GET).
+        self._creer_intervention()
+        r = self.as_(self.agent).get('/api/interventions/')
+        self.assertEqual(r.status_code, 200)
+        self.assertGreaterEqual(len(r.data), 1)
 
     def test_agent_ne_change_pas_statut(self):
         iv = self._creer_intervention().data
@@ -380,7 +398,7 @@ class DiagnosticLoggingTests(BaseAPITest):
     }
 
     def test_creation_intervention_enregistre_le_diagnostic(self):
-        r = self.as_(self.agent).post('/api/interventions/', {
+        r = self.as_(self.resp).post('/api/interventions/', {
             'client_id': self.cli.id,
             'description': 'PC très lent, disque bruyant',
             'type_service': 'reparation',
@@ -399,7 +417,7 @@ class DiagnosticLoggingTests(BaseAPITest):
         self.assertEqual(float(diag.duree_estimee), 2.5)
 
     def test_creation_sans_diagnostic_ne_cree_rien(self):
-        r = self.as_(self.agent).post('/api/interventions/', {
+        r = self.as_(self.resp).post('/api/interventions/', {
             'client_id': self.cli.id,
             'description': 'Écran cassé',
             'type_service': 'reparation',
